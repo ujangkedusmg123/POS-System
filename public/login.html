@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f1f3d">
+<title>Masuk — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+:root { --lg-from:#0f1f3d; --lg-to:#1e6fe8; }
+* { box-sizing:border-box; }
+body {
+  margin:0; min-height:100vh; min-height:100dvh;
+  background:linear-gradient(135deg,var(--lg-from) 0%,var(--lg-to) 100%);
+  background-size:cover; background-position:center;
+  display:flex; align-items:center; justify-content:center;
+  padding:20px; padding:max(20px,env(safe-area-inset-top)) 20px max(20px,env(safe-area-inset-bottom));
+}
+body::before {
+  content:''; position:fixed; inset:0; pointer-events:none;
+  background:radial-gradient(circle at 20% 20%,rgba(255,255,255,.10),transparent 45%),
+             radial-gradient(circle at 85% 75%,rgba(255,255,255,.07),transparent 40%);
+}
+.login-shell { width:100%; max-width:420px; position:relative; z-index:1; }
+.login-card {
+  background:#fff; border-radius:18px; padding:36px 30px;
+  box-shadow:0 24px 70px rgba(0,0,0,.32);
+  animation:cardIn .45s cubic-bezier(.16,1,.3,1);
+}
+@keyframes cardIn { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:none} }
+.brand { text-align:center; margin-bottom:26px; }
+.brand-mark { font-size:54px; line-height:1; display:block; margin-bottom:10px; }
+.brand-mark img { max-width:150px; max-height:84px; object-fit:contain; display:block; margin:0 auto; }
+.brand h1 { font-size:25px; font-weight:800; color:#111827; margin:0 0 5px; letter-spacing:-.4px; }
+.brand p { color:#6b7280; font-size:13px; margin:0; }
+.welcome { text-align:center; font-size:14px; color:#374151; font-weight:600; margin-bottom:20px; }
+.login-error {
+  background:#fef2f2; border:1px solid #fecaca; border-radius:10px;
+  padding:11px 14px; margin-bottom:16px; color:#b91c1c; font-size:13px;
+  display:none; align-items:flex-start; gap:8px; line-height:1.45;
+}
+.login-error.show { display:flex; }
+.field { margin-bottom:15px; }
+.field label { display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px; }
+.field input {
+  width:100%; padding:13px 15px; font-size:16px; /* 16px cegah auto-zoom di iOS */
+  border:1.5px solid #e5e7eb; border-radius:10px; background:#fff;
+  transition:border-color .15s, box-shadow .15s; -webkit-appearance:none;
+}
+.field input:focus { outline:none; border-color:var(--lg-to); box-shadow:0 0 0 3px rgba(30,111,232,.13); }
+.pw-wrap { position:relative; }
+.pw-wrap input { padding-right:48px; }
+.pw-toggle {
+  position:absolute; right:6px; top:50%; transform:translateY(-50%);
+  background:none; border:0; cursor:pointer; font-size:17px; padding:8px 10px;
+  border-radius:8px; line-height:1; color:#6b7280;
+}
+.pw-toggle:hover { background:#f3f4f6; }
+.btn-login {
+  width:100%; padding:14px; font-size:15px; font-weight:700; color:#fff;
+  background:linear-gradient(135deg,var(--lg-from),var(--lg-to));
+  border:0; border-radius:10px; cursor:pointer; margin-top:6px;
+  transition:transform .12s, box-shadow .2s, opacity .2s;
+  box-shadow:0 6px 18px rgba(30,111,232,.28);
+}
+.btn-login:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 9px 24px rgba(30,111,232,.36); }
+.btn-login:active:not(:disabled) { transform:translateY(0); }
+.btn-login:disabled { opacity:.65; cursor:not-allowed; }
+.login-foot { text-align:center; margin-top:18px; font-size:11.5px; color:#9ca3af; line-height:1.6; }
+@media (max-width:420px) {
+  .login-card { padding:28px 20px; border-radius:15px; }
+  .brand h1 { font-size:22px; }
+  .brand-mark { font-size:46px; }
+}
+@media (max-height:560px) { .login-card { padding:20px 22px; } .brand { margin-bottom:16px; } }
+@media (prefers-reduced-motion:reduce) { .login-card { animation:none; } }
+</style>
+</head>
+<body>
+<div class="login-shell">
+  <div class="login-card">
+    <div class="brand">
+      <span class="brand-mark" id="brand-mark">🦐</span>
+      <h1 id="brand-title">Ujang Kedu</h1>
+      <p id="brand-subtitle">Sistem Kuliner Udang Semarang</p>
+    </div>
+    <div class="welcome" id="brand-welcome">Selamat datang kembali</div>
+
+    <div class="login-error" id="error-msg"><span>⚠️</span><span id="error-text"></span></div>
+
+    <div class="field">
+      <label for="username">Username</label>
+      <input type="text" id="username" placeholder="Masukkan username"
+             autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="password" placeholder="Masukkan password" autocomplete="current-password">
+        <button type="button" class="pw-toggle" id="pw-toggle" aria-label="Tampilkan password">👁️</button>
+      </div>
+    </div>
+    <button id="login-btn" class="btn-login">Masuk</button>
+  </div>
+  <div class="login-foot" id="brand-footer"></div>
+</div>
+
+<script>
+/* Sudah login? Masuk otomatis — TAPI hanya bila token benar-benar masih sah
+   menurut server. Sebelumnya cukup "ada token di localStorage", sehingga token
+   kedaluwarsa tetap dianggap login dan pengguna langsung dilempar ke sistem.
+   Saat dipakai sebagai pratinjau (?preview=1), pengalihan dimatikan total. */
+(function () {
+  const IS_PREVIEW = new URLSearchParams(location.search).has('preview');
+  if (IS_PREVIEW) { document.documentElement.dataset.preview = '1'; return; }
+
+  const tok = sessionStorage.getItem('pos_token');
+  const raw = sessionStorage.getItem('pos_user');
+  if (!tok || !raw) return;
+
+  fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + tok }, cache: 'no-store' })
+    .then(function (res) {
+      if (!res.ok) {
+        // Token tidak sah / kedaluwarsa -> bersihkan, tetap di halaman login
+        sessionStorage.removeItem('pos_token');
+        sessionStorage.removeItem('pos_user');
+        return null;
+      }
+      return res.json();
+    })
+    .then(function (me) {
+      if (!me) return;
+      window.location.replace(halamanPertama(me.permissions));
+    })
+    .catch(function () { /* offline: biarkan pengguna login manual */ });
+})();
+
+/* Halaman tujuan setelah login = menu PERTAMA yang boleh diakses pengguna.
+   Urutannya sengaja sama dengan urutan sidebar di app.js, supaya tujuan
+   pendaratan selalu masuk akal untuk perannya: kasir ke halaman kasir, koki ke
+   layar dapur, runner ke transfer stok, dan seterusnya. Sebelumnya semua orang
+   dilempar ke /pos.html — peran yang tidak punya izin kasir mendarat di halaman
+   kosong, memicu permintaan yang ditolak, lalu baru dilempar lagi. */
+const TUJUAN_PER_IZIN = [
+  ['dashboard.view',   '/'],
+  ['pos.view',         '/pos.html'],
+  ['pos.session_open', '/kasir-shift.html'],
+  ['kitchen.view',     '/kitchen.html'],
+  // Izin yang paling menentukan peran didahulukan: tim produksi mendarat di
+  // halaman produksi, runner di transfer stok — bukan di daftar produk.
+  ['production.view',  '/production.html'],
+  ['stock.transfer',   '/stock-transfer.html'],
+  ['stock.view',       '/stock.html'],
+  ['products.view',    '/products.html'],
+  ['bahan.view',       '/bahan.html'],
+  ['sales.view',       '/sales.html'],
+  ['shift.report',     '/shift-reports.html'],
+  ['customers.view',   '/customers.html'],
+  ['finance.view',     '/finance.html'],
+  ['production.view',  '/production.html'],
+  ['wallets.view',     '/wallets.html'],
+  ['expenses.view',    '/expenses.html'],
+  ['reports.view',     '/reports.html'],
+  ['branches.view',    '/branches.html'],
+  ['users.view',       '/users.html'],
+  ['settings.view',    '/pengaturan.html'],
+];
+function halamanPertama(perms) {
+  const p = perms || [];
+  const punya = (k) => p.indexOf('*') !== -1 || p.indexOf(k) !== -1 || p.indexOf(k.split('.')[0] + '.*') !== -1;
+  const hit = TUJUAN_PER_IZIN.find(([izin]) => punya(izin));
+  return hit ? hit[1] : '/pos.html';
+}
+
+/* Branding halaman login — diambil dari endpoint publik (tanpa token). */
+(async function loadBranding() {
+  try {
+    const res = await fetch('/api/settings/public/login');
+    if (!res.ok) return;
+    const s = await res.json();
+    const set = (id, val) => { if (val) document.getElementById(id).textContent = val; };
+
+    set('brand-title', s.login_title);
+    set('brand-subtitle', s.login_subtitle);
+    set('brand-welcome', s.login_welcome);
+    if (s.login_welcome === '') document.getElementById('brand-welcome').style.display = 'none';
+
+    if (s.login_logo) {
+      document.getElementById('brand-mark').innerHTML =
+        '<img src="' + s.login_logo.replace(/"/g, '&quot;') + '" alt="Logo">';
+    } else if (s.login_emoji) {
+      document.getElementById('brand-mark').textContent = s.login_emoji;
+    }
+
+    if (s.login_bg_from) document.documentElement.style.setProperty('--lg-from', s.login_bg_from);
+    if (s.login_bg_to)   document.documentElement.style.setProperty('--lg-to', s.login_bg_to);
+    if (s.login_bg_image) {
+      document.body.style.backgroundImage =
+        'linear-gradient(135deg, rgba(15,31,61,.82), rgba(30,111,232,.72)), url("' +
+        s.login_bg_image.replace(/"/g, '&quot;') + '")';
+    }
+    if (s.login_footer) document.getElementById('brand-footer').textContent = s.login_footer;
+    if (s.login_title) document.title = 'Masuk — ' + s.login_title;
+  } catch (e) { /* pakai tampilan bawaan */ }
+})();
+
+/* Tampilkan / sembunyikan password */
+document.getElementById('pw-toggle').addEventListener('click', function () {
+  const inp = document.getElementById('password');
+  const show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  this.textContent = show ? '🙈' : '👁️';
+  this.setAttribute('aria-label', show ? 'Sembunyikan password' : 'Tampilkan password');
+  inp.focus();
+});
+
+function showError(msg) {
+  document.getElementById('error-text').textContent = msg;
+  document.getElementById('error-msg').classList.add('show');
+}
+function hideError() { document.getElementById('error-msg').classList.remove('show'); }
+
+async function doLogin() {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const btn = document.getElementById('login-btn');
+  hideError();
+
+  if (!username || !password) {
+    showError('Username dan password wajib diisi');
+    (!username ? document.getElementById('username') : document.getElementById('password')).focus();
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Memproses...';
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    let result = {};
+    try { result = await res.json(); } catch (e) {}
+
+    if (!res.ok || result.error) {
+      // Pesan sengaja tidak membedakan "username salah" vs "password salah"
+      showError(result.error || 'Username atau password salah');
+      btn.disabled = false; btn.textContent = 'Masuk';
+      document.getElementById('password').value = '';
+      document.getElementById('password').focus();
+      return;
+    }
+
+    sessionStorage.setItem('pos_token', result.token);
+    sessionStorage.setItem('pos_user', JSON.stringify(result.user));
+
+    window.location.href = halamanPertama(result.user.permissions);
+  } catch (e) {
+    showError('Tidak dapat terhubung ke server. Periksa koneksi Anda.');
+    btn.disabled = false; btn.textContent = 'Masuk';
+  }
+}
+
+document.getElementById('login-btn').addEventListener('click', doLogin);
+['username', 'password'].forEach((id) => {
+  document.getElementById(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+  document.getElementById(id).addEventListener('input', hideError);
+});
+document.getElementById('username').focus();
+</script>
+</body>
+</html>

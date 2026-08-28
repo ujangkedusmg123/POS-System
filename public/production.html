@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Produksi & Surplus — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<aside id="sidebar">
+  <div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div>
+  <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  <div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user">
+    <div class="avatar" id="user-avatar">A</div>
+    <div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div>
+    <a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a>
+  </div></div>
+</aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">🏭 Produksi & Surplus</div><div class="page-subtitle">Input data produksi harian & lihat hasil hitungannya</div></div>
+    <div class="top-bar-actions"><button class="btn btn-secondary" onclick="exportExcel(this)">📗 Excel</button><button class="btn btn-primary" onclick="openAddModal()">+ Tambah Data Harian</button></div>
+  </div>
+
+  <div class="page-content">
+
+    <!-- ===== KONSTANTA / HPP ===== -->
+    <div class="card" style="border-left:4px solid var(--primary)">
+      <div class="card-header"><span class="card-title">⚙️ Konstanta Perhitungan (HPP)</span>
+        <button class="btn btn-sm btn-primary" onclick="saveConfig()">💾 Simpan Konstanta</button>
+      </div>
+      <div style="padding:6px 4px 4px">
+        <div class="grid-4" style="gap:14px">
+          <div class="form-group" style="margin:0">
+            <label class="form-label">HPP 1 Resep (Rp)</label>
+            <input type="number" id="c-hpp-resep" class="form-control font-mono" min="0">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Harga Jual 1 Porsi (Rp)</label>
+            <input type="number" id="c-harga-jual" class="form-control font-mono" min="0">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">HPP Packaging (Rp)</label>
+            <input type="number" id="c-hpp-packaging" class="form-control font-mono" min="0">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label class="form-label">Opex Harian default (Rp)</label>
+            <input type="number" id="c-opex" class="form-control font-mono" min="0">
+          </div>
+        </div>
+        <div style="margin-top:12px;max-width:220px">
+          <label class="form-label">Pcs per Porsi (pembagi Output)</label>
+          <input type="number" id="c-pcs" class="form-control font-mono" min="1" value="4">
+        </div>
+        <div style="margin-top:14px;background:#f8fafc;border:1px solid #eef2f7;border-radius:10px;padding:11px 14px;font-size:12px;color:var(--text-secondary);line-height:1.6">
+          <strong style="color:var(--text-primary)">Rumus otomatis</strong> · Porsi = Output ÷ Pcs/Porsi · Uang Keluar = HPP Resep × Jumlah Resep · Uang Masuk = Porsi × Harga Jual · Gross Margin = Uang Masuk − Uang Keluar − Packaging · Surplus = Gross Margin − Opex.
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== FILTER ===== -->
+    <div class="card">
+      <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+        <div class="form-group" style="margin:0"><label class="form-label">Dari Tanggal</label><input type="date" id="f-start" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Sampai</label><input type="date" id="f-end" class="form-control"></div>
+        <div class="form-group" style="margin:0" id="branch-filter-wrap"><label class="form-label">Cabang</label><select id="f-branch" class="form-control"><option value="">Semua Cabang</option></select></div>
+        <button class="btn btn-secondary" onclick="loadData()">🔎 Terapkan</button>
+        <button class="btn btn-outline" onclick="resetFilter()">Reset</button>
+      </div>
+    </div>
+
+    <!-- ===== DASHBOARD KPI ===== -->
+    <div class="grid-4 mb-4" id="kpi-row"></div>
+
+    <!-- ===== CHART ===== -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">📈 Tren Uang Masuk & Surplus</span></div>
+      <div style="height:300px"><canvas id="prod-chart"></canvas></div>
+    </div>
+
+    <!-- ===== REKAP TABLE ===== -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">📋 Rekap Hasil Produksi</span></div>
+      <div class="table-wrapper" style="overflow-x:auto">
+        <table class="table" style="min-width:1200px;font-size:12px">
+          <thead>
+            <tr>
+              <th>Tanggal</th><th>Jumlah Resep</th><th>Output (pcs)</th><th>Output/Resep</th>
+              <th>Rasio HPP</th><th>Gross Margin %</th><th>Uang Keluar</th><th>Porsi</th>
+              <th>Uang Packaging</th><th>Uang Masuk</th><th>Gross Margin</th><th>Opex Harian</th>
+              <th>Surplus</th><th>% Surplus</th><th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="rekap-tbody"></tbody>
+          <tfoot id="rekap-tfoot"></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="log-modal">
+  <div class="modal-box" style="max-width:460px">
+    <div class="modal-header"><span class="modal-title" id="log-title">Tambah Data Produksi</span><button class="modal-close" onclick="closeModal('log-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="l-id">
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Tanggal <span class="required">*</span></label><input type="date" id="l-date" class="form-control"></div>
+        <div class="form-group" id="l-branch-wrap"><label class="form-label">Cabang</label><select id="l-branch" class="form-control"><option value="">— Umum —</option></select></div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Jumlah Resep <span class="required">*</span></label><input type="number" id="l-resep" class="form-control font-mono" min="0" step="1" placeholder="20"></div>
+        <div class="form-group"><label class="form-label">Output (pcs) <span class="required">*</span></label><input type="number" id="l-output" class="form-control font-mono" min="0" step="1" placeholder="741"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Opex Harian (Rp)</label><input type="number" id="l-opex" class="form-control font-mono" min="0" placeholder="650000"><small style="color:var(--text-muted)">Kosongkan untuk pakai default konstanta.</small></div>
+      <div class="form-group"><label class="form-label">Catatan</label><input type="text" id="l-notes" class="form-control" placeholder="opsional"></div>
+      <div id="l-preview" style="background:var(--bg-light);border-radius:10px;padding:12px;font-size:12px;line-height:1.7;display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('log-modal')">Batal</button>
+      <button class="btn btn-primary" id="l-save-btn" onclick="saveLog()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+// Gerbang halaman ditangani initPage() berdasarkan hak akses. Pemeriksaan
+// "harus admin" yang lama dihapus karena menendang keluar peran sah lain
+// (supervisor, tim produksi, runner) yang justru diberi izin untuk halaman ini.
+initPage('production', 'Produksi & Surplus', 'Input data produksi harian & lihat hasil hitungannya');
+
+let CFG = {}, ROWS = [], SUMMARY = {}, branches = [], prodChart = null;
+const pct = (x, d=0) => (isFinite(x) ? (x*100).toFixed(d) : '0') + '%';
+const rp = (x) => fmt.currency(Math.round(x||0));
+function fmtDate(s){ try { const d=new Date(s+'T00:00:00'); return d.toLocaleDateString('id-ID',{day:'2-digit',month:'short'}); } catch(e){ return s; } }
+function num(x,d=1){ return (Number(x)||0).toLocaleString('id-ID',{maximumFractionDigits:d}); }
+
+async function init() {
+  try { branches = await API.get('/branches'); } catch(e) { branches = []; }
+  const opts = '<option value="">Semua Cabang</option>' + branches.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  document.getElementById('f-branch').innerHTML = opts;
+  document.getElementById('l-branch').innerHTML = '<option value="">— Umum —</option>' + branches.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  await loadConfig();
+  await loadData();
+}
+
+async function loadConfig() {
+  CFG = await API.get('/production/config');
+  document.getElementById('c-hpp-resep').value = CFG.hpp_resep;
+  document.getElementById('c-harga-jual').value = CFG.harga_jual;
+  document.getElementById('c-hpp-packaging').value = CFG.hpp_packaging;
+  document.getElementById('c-opex').value = CFG.opex_harian;
+  document.getElementById('c-pcs').value = CFG.pcs_per_porsi;
+}
+
+async function saveConfig() {
+  const body = {
+    hpp_resep: parseFloat(document.getElementById('c-hpp-resep').value)||0,
+    harga_jual: parseFloat(document.getElementById('c-harga-jual').value)||0,
+    hpp_packaging: parseFloat(document.getElementById('c-hpp-packaging').value)||0,
+    opex_harian: parseFloat(document.getElementById('c-opex').value)||0,
+    pcs_per_porsi: parseFloat(document.getElementById('c-pcs').value)||4,
+  };
+  try { const r = await API.put('/production/config', body); CFG = r.config; showToast('Konstanta disimpan','success'); await loadData(); }
+  catch(e) { showToast(e.message,'error'); }
+}
+
+function resetFilter(){ document.getElementById('f-start').value=''; document.getElementById('f-end').value=''; document.getElementById('f-branch').value=''; loadData(); }
+
+async function loadData() {
+  const s = document.getElementById('f-start').value;
+  const e = document.getElementById('f-end').value;
+  const b = document.getElementById('f-branch').value;
+  const qs = new URLSearchParams(); if(s)qs.set('start',s); if(e)qs.set('end',e); if(b)qs.set('branch_id',b);
+  try {
+    const data = await API.get('/production' + (qs.toString()?'?'+qs.toString():''));
+    CFG = data.config; ROWS = data.rows; SUMMARY = data.summary;
+    renderKPI(); renderChart(); renderTable();
+  } catch(err) { showToast('Gagal memuat: '+err.message,'error'); }
+}
+
+function renderKPI() {
+  const s = SUMMARY;
+  document.getElementById('kpi-row').innerHTML = `
+    <div class="kpi-card success"><div class="kpi-icon">💰</div><div class="kpi-label">Total Surplus</div><div class="kpi-value large">${rp(s.total_surplus)}</div><div class="kpi-change">${s.days||0} hari</div></div>
+    <div class="kpi-card primary"><div class="kpi-icon">📥</div><div class="kpi-label">Total Uang Masuk</div><div class="kpi-value large">${rp(s.total_uang_masuk)}</div><div class="kpi-change">${num(s.total_porsi,0)} porsi</div></div>
+    <div class="kpi-card secondary"><div class="kpi-icon">📊</div><div class="kpi-label">Rata² Gross Margin</div><div class="kpi-value large">${pct(s.avg_gross_margin_pct)}</div><div class="kpi-change">GM ${rp(s.total_gross_margin)}</div></div>
+    <div class="kpi-card warning"><div class="kpi-icon">🎯</div><div class="kpi-label">Rata² % Surplus</div><div class="kpi-value large">${pct(s.avg_surplus_pct)}</div><div class="kpi-change">Opex ${rp(s.total_opex)}</div></div>
+  `;
+}
+
+function renderChart() {
+  const ctx = document.getElementById('prod-chart');
+  const labels = ROWS.map(r=>fmtDate(r.log_date));
+  if (prodChart) prodChart.destroy();
+  prodChart = new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        { type:'bar', label:'Uang Masuk', data: ROWS.map(r=>Math.round(r.uang_masuk)),
+          backgroundColor:'rgba(30,111,232,0.18)', borderColor:'rgba(30,111,232,0.9)', borderWidth:1,
+          borderRadius:6, maxBarThickness:44, categoryPercentage:0.6, barPercentage:0.7, order:2, yAxisID:'y' },
+        { type:'line', label:'Surplus', data: ROWS.map(r=>Math.round(r.surplus)),
+          borderColor:'#16a34a', backgroundColor:'rgba(22,163,74,0.08)', tension:0.35, borderWidth:2.5,
+          pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#fff', pointBorderColor:'#16a34a', pointBorderWidth:2,
+          fill:true, order:1, yAxisID:'y' },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ top:8, right:8, left:4, bottom:4 } },
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{ position:'top', align:'end', labels:{ usePointStyle:true, boxWidth:8, padding:16, font:{ size:12, family:"'Inter',sans-serif" } } },
+        tooltip:{ backgroundColor:'#0f1f3d', padding:10, cornerRadius:8, titleFont:{ size:12 }, bodyFont:{ size:12 },
+          callbacks:{ label:(c)=>'  '+c.dataset.label+': '+rp(c.parsed.y) } }
+      },
+      scales:{
+        x:{ grid:{ display:false }, ticks:{ font:{ size:11, family:"'Inter',sans-serif" }, color:'#64748b' } },
+        y:{ grid:{ color:'#eef2f7' }, border:{ display:false },
+            ticks:{ font:{ size:11 }, color:'#94a3b8', callback:(v)=> (v>=1000||v<=-1000) ? 'Rp '+(v/1000).toLocaleString('id-ID')+'rb' : 'Rp '+v } }
+      }
+    }
+  });
+}
+
+function renderTable() {
+  const tb = document.getElementById('rekap-tbody');
+  if (!ROWS.length) { tb.innerHTML = '<tr><td colspan="15" class="text-center text-muted" style="padding:26px">Belum ada data. Klik "Tambah Data Harian".</td></tr>'; document.getElementById('rekap-tfoot').innerHTML=''; return; }
+  tb.innerHTML = ROWS.map(r=>`<tr>
+    <td style="white-space:nowrap;font-weight:600">${fmtDate(r.log_date)}</td>
+    <td>${num(r.jumlah_resep,0)}</td>
+    <td>${num(r.output_pcs,0)}</td>
+    <td>${num(r.output_per_resep,1)}</td>
+    <td>${pct(r.rasio_hpp_pct)}</td>
+    <td style="color:${r.gross_margin_pct>=0.4?'var(--success)':'var(--warning)'};font-weight:700">${pct(r.gross_margin_pct)}</td>
+    <td class="font-mono">${rp(r.uang_keluar)}</td>
+    <td>${num(r.porsi,1)}</td>
+    <td class="font-mono">${rp(r.uang_packaging)}</td>
+    <td class="font-mono" style="font-weight:700">${rp(r.uang_masuk)}</td>
+    <td class="font-mono">${rp(r.gross_margin)}</td>
+    <td class="font-mono">${rp(r.opex_harian)}</td>
+    <td class="font-mono" style="font-weight:800;color:${r.surplus>=0?'var(--success)':'var(--danger)'}">${rp(r.surplus)}</td>
+    <td style="font-weight:700">${pct(r.surplus_pct)}</td>
+    <td style="white-space:nowrap"><button class="btn-icon" title="Edit" onclick="openEditModal(${r.id})">✏️</button><button class="btn-icon" title="Hapus" style="color:var(--danger)" onclick="deleteLog(${r.id})">🗑️</button></td>
+  </tr>`).join('');
+  const s = SUMMARY;
+  document.getElementById('rekap-tfoot').innerHTML = `<tr style="background:var(--bg-light);font-weight:800">
+    <td>TOTAL</td><td>${num(s.total_resep,0)}</td><td>${num(s.total_output,0)}</td><td>${num(s.avg_output_per_resep,1)}</td>
+    <td>${pct(1-s.avg_gross_margin_pct)}</td><td>${pct(s.avg_gross_margin_pct)}</td><td class="font-mono">${rp(s.total_uang_keluar)}</td>
+    <td>${num(s.total_porsi,0)}</td><td class="font-mono">${rp(s.total_packaging)}</td><td class="font-mono">${rp(s.total_uang_masuk)}</td>
+    <td class="font-mono">${rp(s.total_gross_margin)}</td><td class="font-mono">${rp(s.total_opex)}</td>
+    <td class="font-mono" style="color:${s.total_surplus>=0?'var(--success)':'var(--danger)'}">${rp(s.total_surplus)}</td><td>${pct(s.avg_surplus_pct)}</td><td></td>
+  </tr>`;
+}
+
+// ---- Modal ----
+function todayStr(){ return getToday(); }           // tanggal WIB
+function openAddModal() {
+  document.getElementById('log-title').textContent = 'Tambah Data Produksi';
+  document.getElementById('l-id').value = '';
+  document.getElementById('l-date').value = todayStr();
+  document.getElementById('l-branch').value = '';
+  document.getElementById('l-resep').value = '';
+  document.getElementById('l-output').value = '';
+  document.getElementById('l-opex').value = CFG.opex_harian || '';
+  document.getElementById('l-notes').value = '';
+  document.getElementById('l-preview').style.display='none';
+  ['l-resep','l-output','l-opex'].forEach(id=>document.getElementById(id).oninput=updatePreview);
+  openModal('log-modal');
+}
+function openEditModal(id) {
+  const r = ROWS.find(x=>x.id===id); if(!r) return;
+  document.getElementById('log-title').textContent = 'Edit Data Produksi';
+  document.getElementById('l-id').value = r.id;
+  document.getElementById('l-date').value = r.log_date;
+  document.getElementById('l-branch').value = r.branch_id||'';
+  document.getElementById('l-resep').value = r.jumlah_resep;
+  document.getElementById('l-output').value = r.output_pcs;
+  document.getElementById('l-opex').value = r.opex_harian;
+  document.getElementById('l-notes').value = r.notes||'';
+  ['l-resep','l-output','l-opex'].forEach(id=>document.getElementById(id).oninput=updatePreview);
+  updatePreview();
+  openModal('log-modal');
+}
+function updatePreview() {
+  const resep = parseFloat(document.getElementById('l-resep').value)||0;
+  const output = parseFloat(document.getElementById('l-output').value)||0;
+  const opex = document.getElementById('l-opex').value!=='' ? parseFloat(document.getElementById('l-opex').value)||0 : (CFG.opex_harian||0);
+  const pcs = CFG.pcs_per_porsi||4;
+  const porsi = output/pcs;
+  const uangKeluar = (CFG.hpp_resep||0)*resep;
+  const packaging = porsi*(CFG.hpp_packaging||0);
+  const uangMasuk = porsi*(CFG.harga_jual||0);
+  const gm = uangMasuk-uangKeluar-packaging;
+  const surplus = gm-opex;
+  const el = document.getElementById('l-preview');
+  el.style.display='block';
+  el.innerHTML = `Porsi: <strong>${num(porsi,1)}</strong> · Uang Masuk: <strong>${rp(uangMasuk)}</strong><br>
+    Uang Keluar: ${rp(uangKeluar)} · Packaging: ${rp(packaging)}<br>
+    Gross Margin: <strong>${rp(gm)}</strong> (${uangMasuk>0?pct(gm/uangMasuk):'0%'})<br>
+    Surplus: <strong style="color:${surplus>=0?'var(--success)':'var(--danger)'}">${rp(surplus)}</strong> (${uangMasuk>0?pct(surplus/uangMasuk):'0%'})`;
+}
+async function saveLog() {
+  const id = document.getElementById('l-id').value;
+  const body = {
+    log_date: document.getElementById('l-date').value,
+    branch_id: document.getElementById('l-branch').value||null,
+    jumlah_resep: parseFloat(document.getElementById('l-resep').value)||0,
+    output_pcs: parseFloat(document.getElementById('l-output').value)||0,
+    opex_harian: document.getElementById('l-opex').value,
+    notes: document.getElementById('l-notes').value.trim(),
+  };
+  if (!body.log_date) { showToast('Tanggal wajib diisi','warning'); return; }
+  if (!body.jumlah_resep || !body.output_pcs) { showToast('Jumlah resep & output wajib diisi','warning'); return; }
+  const btn = document.getElementById('l-save-btn'); btn.disabled=true;
+  try {
+    if (id) await API.put('/production/'+id, body); else await API.post('/production', body);
+    showToast('Data disimpan','success'); closeModal('log-modal'); await loadData();
+  } catch(e) { showToast(e.message,'error'); }
+  btn.disabled=false;
+}
+function deleteLog(id) {
+  confirmDialog('Hapus data produksi ini?', async () => {
+    try { await API.delete('/production/'+id); showToast('Data dihapus','success'); await loadData(); }
+    catch(e) { showToast(e.message,'error'); }
+  }, 'Hapus Data');
+}
+
+init();
+
+
+/* Ekspor rekap produksi & surplus harian. */
+function exportExcel(btn) {
+  if (!ROWS || !ROWS.length) return showToast('Belum ada data untuk diekspor','warning');
+  downloadExcel({
+    filename: 'produksi-surplus-' + getToday(),
+    sheets: [{
+      name:'Produksi Harian', title:'Produksi & Surplus Harian \u2014 Ujang Kedu',
+      meta: excelMeta([['Jumlah hari', ROWS.length]]),
+      columns:[
+        {header:'Tanggal',key:'tgl',type:'date'},{header:'Jumlah Resep',key:'resep',type:'decimal'},
+        {header:'Output (pcs)',key:'output',type:'number'},{header:'Output / Resep',key:'per',type:'decimal'},
+        {header:'Rasio HPP',key:'rasio',type:'percent'},{header:'Margin Kotor',key:'margin',type:'percent'},
+        {header:'Uang Keluar (Rp)',key:'keluar',type:'money'},{header:'Porsi',key:'porsi',type:'decimal'},
+        {header:'Kemasan (Rp)',key:'packaging',type:'money'},{header:'Uang Masuk (Rp)',key:'masuk',type:'money'},
+        {header:'Surplus (Rp)',key:'surplus',type:'money'}],
+      rows: ROWS.map(r => ({ tgl:r.log_date, resep:r.jumlah_resep||0, output:r.output_pcs||0, per:r.output_per_resep||0,
+        rasio:(r.rasio_hpp_pct||0)*100, margin:(r.gross_margin_pct||0)*100, keluar:r.uang_keluar||0, porsi:r.porsi||0,
+        packaging:r.uang_packaging||0, masuk:r.uang_masuk||0, surplus:r.surplus||0 })),
+      totals: { tgl:'TOTAL', output:ROWS.reduce((a,r)=>a+(r.output_pcs||0),0),
+        keluar:ROWS.reduce((a,r)=>a+(r.uang_keluar||0),0), masuk:ROWS.reduce((a,r)=>a+(r.uang_masuk||0),0),
+        surplus:ROWS.reduce((a,r)=>a+(r.surplus||0),0) },
+    }],
+  }, btn);
+}
+</script>
+</body>
+</html>

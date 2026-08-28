@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log Aktivitas — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.act-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.act-tbl th { background:#f8fafc; padding:10px 14px; text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; border-bottom:1px solid #e5e7eb; font-weight:700; }
+.act-tbl td { padding:11px 14px; border-bottom:1px solid #f1f5f9; }
+.mod-badge { font-size:10px; padding:3px 8px; border-radius:6px; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; }
+</style>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">📜 Log Aktivitas</div><div class="page-subtitle">Semua pergerakan di sistem POS</div></div>
+    <div class="top-bar-actions">
+      <button class="btn btn-secondary" onclick="exportExcel(this)">📗 Excel</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="card">
+      <div class="card-header" style="flex-wrap:wrap;gap:10px">
+        <span class="card-title">Riwayat</span>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input type="date" id="a-start" class="form-control" style="width:140px">
+          <span style="color:#6b7280">—</span>
+          <input type="date" id="a-end" class="form-control" style="width:140px">
+          <button class="btn btn-secondary btn-sm" onclick="setQ('today')">Hari Ini</button>
+          <button class="btn btn-secondary btn-sm" onclick="setQ('week')">7 Hari</button>
+          <button class="btn btn-secondary btn-sm" onclick="setQ('month')">Bulan Ini</button>
+          <select id="a-user" class="form-control" style="width:160px"><option value="">Semua User</option></select>
+          <select id="a-module" class="form-control" style="width:140px"><option value="">Semua Modul</option></select>
+          <select id="a-action" class="form-control" style="width:140px"><option value="">Semua Aksi</option></select>
+          <button class="btn btn-primary btn-sm" onclick="loadLogs()">🔄 Terapkan</button>
+        </div>
+      </div>
+      <div style="padding:10px 20px;background:#fafbfc;border-bottom:1px solid #f3f4f6;font-size:13px" id="a-summary"></div>
+      <div class="table-wrapper">
+        <table class="act-tbl">
+          <thead>
+            <tr><th>Waktu</th><th>User</th><th>Modul</th><th>Aksi</th><th>Deskripsi</th></tr>
+          </thead>
+          <tbody id="a-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+initPage('activity','Log Aktivitas','Audit trail');
+let currentLogs = [];
+
+const MODULE_COLOR = {
+  auth:      '#dbeafe|#1e40af',
+  sales:     '#d1fae5|#065f46',
+  stock:     '#fef3c7|#92400e',
+  wallets:   '#e0e7ff|#3730a3',
+  expenses:  '#fee2e2|#991b1b',
+  users:     '#f3e8ff|#6b21a8',
+  channels:  '#fce7f3|#9f1239',
+  products:  '#ecfeff|#155e75',
+  branches:  '#f0fdf4|#166534',
+  customers: '#fef9c3|#854d0e',
+};
+
+async function loadMeta() {
+  try {
+    const m = await API.get('/activity/meta');
+    const uOpts = '<option value="">Semua User</option>' + m.users.map(u=>`<option value="${u.user_id}">${u.user_name}</option>`).join('');
+    const modOpts = '<option value="">Semua Modul</option>' + m.modules.map(x=>`<option value="${x}">${x}</option>`).join('');
+    const actOpts = '<option value="">Semua Aksi</option>' + m.actions.map(x=>`<option value="${x}">${x}</option>`).join('');
+    document.getElementById('a-user').innerHTML = uOpts;
+    document.getElementById('a-module').innerHTML = modOpts;
+    document.getElementById('a-action').innerHTML = actOpts;
+  } catch(e) {}
+}
+
+async function loadLogs() {
+  const params = new URLSearchParams();
+  const s = document.getElementById('a-start').value;
+  const e = document.getElementById('a-end').value;
+  const u = document.getElementById('a-user').value;
+  const m = document.getElementById('a-module').value;
+  const a = document.getElementById('a-action').value;
+  if (s) params.set('start_date', s);
+  if (e) params.set('end_date', e);
+  if (u) params.set('user_id', u);
+  if (m) params.set('module', m);
+  if (a) params.set('action', a);
+  params.set('limit','500');
+  try {
+    const r = await API.get('/activity?'+params.toString());
+    currentLogs = r.logs;
+    render(r.logs, r.count);
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+function render(logs, count) {
+  document.getElementById('a-summary').innerHTML = `<strong>${count}</strong> aktivitas tercatat (menampilkan yang terbaru dulu)`;
+  document.getElementById('a-tbody').innerHTML = logs.map(l => {
+    const [bg,col] = (MODULE_COLOR[l.module]||'#f3f4f6|#4b5563').split('|');
+    return `<tr>
+      <td style="white-space:nowrap;font-size:12px">${fmt.dateTime(l.created_at)}</td>
+      <td style="font-weight:600;font-size:13px">${l.user_name||'Sistem'}</td>
+      <td><span class="mod-badge" style="background:${bg};color:${col}">${l.module}</span></td>
+      <td style="font-size:12px;color:#374151;font-family:ui-monospace,monospace">${l.action}</td>
+      <td>${l.description||''}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" style="text-align:center;padding:30px;color:#9ca3af">Belum ada log</td></tr>';
+}
+
+function setQ(range) {
+  const today = todayLocal();
+  const d = new Date();
+  let start = today;
+  if (range === 'week') { d.setDate(d.getDate()-6); start = (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')); }
+  else if (range === 'month') { start = today.slice(0,8)+'01'; }
+  document.getElementById('a-start').value = start;
+  document.getElementById('a-end').value = today;
+  loadLogs();
+}
+
+function exportExcel(btn) {
+  if (!currentLogs.length) return showToast('Belum ada data untuk diekspor','warning');
+  downloadExcel({
+    filename: 'log-aktivitas-' + getToday(),
+    sheets: [{
+      name: 'Log Aktivitas',
+      title: 'Log Aktivitas Sistem \u2014 Ujang Kedu',
+      meta: excelMeta([['Jumlah baris', currentLogs.length]]),
+      columns: [
+        { header:'Waktu', key:'waktu', type:'datetime' },
+        { header:'Pengguna', key:'user' },
+        { header:'Modul', key:'modul' },
+        { header:'Aksi', key:'aksi' },
+        { header:'Keterangan', key:'ket', width:60 },
+      ],
+      rows: currentLogs.map(l => ({ waktu:l.created_at, user:l.user_name||'-', modul:l.module, aksi:l.action, ket:l.description||'-' })),
+    }],
+  }, btn);
+}
+
+(async () => {
+  // Default filter: 7 hari terakhir
+  const today = todayLocal();
+  const d = new Date(); d.setDate(d.getDate()-6);
+  document.getElementById('a-end').value = today;
+  document.getElementById('a-start').value = (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));
+  await loadMeta();
+  await loadLogs();
+})();
+</script>
+</body>
+</html>

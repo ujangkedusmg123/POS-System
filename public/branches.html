@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manajemen Cabang — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">🏪 Manajemen Cabang</div><div class="page-subtitle">Kelola outlet dan dapur produksi</div></div>
+    <div class="top-bar-actions">
+      <button class="btn btn-primary" onclick="openAddModal()">+ Tambah Cabang</button>
+    </div>
+  </div>
+  <div class="page-content">
+    <div id="branch-cards" class="grid-3 mb-4"></div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Daftar Cabang</span></div>
+      <div class="table-wrapper">
+        <table class="table">
+          <thead><tr><th>Nama Cabang</th><th>Tipe</th><th>Alamat</th><th>Telepon</th><th style="text-align:right">Total Stok</th><th style="text-align:center">Item</th><th style="text-align:center">Kasir</th><th>Status</th><th>Aksi</th></tr></thead>
+          <tbody id="branch-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="branch-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title" id="branch-modal-title">Tambah Cabang</span><button class="modal-close" onclick="closeModal('branch-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-branch-id">
+      <div class="form-group"><label class="form-label">Nama Cabang *</label><input type="text" id="b-name" class="form-control" placeholder="Contoh: Outlet Pemuda"></div>
+      <div class="form-group"><label class="form-label">Alamat</label><textarea id="b-address" class="form-control" rows="2" placeholder="Alamat lengkap"></textarea></div>
+      <div class="form-group"><label class="form-label">Nomor Telepon</label><input type="text" id="b-phone" class="form-control" placeholder="0812-xxxx-xxxx"></div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="b-production" style="width:18px;height:18px">
+          <span><strong>🏭 Cabang ini adalah Dapur Produksi</strong><br><small style="color:#6b7280">Bisa jadi sumber transfer stok ke outlet lain. Ditandai dengan ikon 🏭.</small></span>
+        </label>
+      </div>
+      <div class="form-group" id="b-status-group" style="display:none">
+        <label class="form-label">Status</label>
+        <select id="b-active" class="form-control"><option value="1">✅ Aktif</option><option value="0">❌ Nonaktif</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('branch-modal')">Batal</button>
+      <button class="btn btn-primary" id="save-branch-btn" onclick="saveBranch()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+// Gerbang halaman ditangani initPage() berdasarkan hak akses. Pemeriksaan
+// "harus admin" yang lama dihapus karena menendang keluar peran sah lain
+// (supervisor, tim produksi, runner) yang justru diberi izin untuk halaman ini.
+initPage('branches','Manajemen Cabang','Outlet & Dapur Produksi');
+let allBranches = [];
+
+async function loadBranches() {
+  try {
+    allBranches = await API.get('/branches');
+    renderCards(allBranches);
+    renderTable(allBranches);
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+function renderCards(branches) {
+  const activeCount = branches.filter(b=>b.is_active).length;
+  const productionCount = branches.filter(b=>b.is_active && b.is_production_center).length;
+  const outletCount = activeCount - productionCount;
+  const totalStock = branches.reduce((s,b)=>s+(b.total_stock||0),0);
+  const totalUsers = branches.reduce((s,b)=>s+(b.user_count||0),0);
+  document.getElementById('branch-cards').innerHTML = `
+    <div class="kpi-card primary">
+      <div class="kpi-icon">🏪</div>
+      <div class="kpi-label">Cabang Aktif</div>
+      <div class="kpi-value">${activeCount}</div>
+      <div class="kpi-change" style="font-size:11px;color:#6b7280">${productionCount} dapur produksi · ${outletCount} outlet</div>
+    </div>
+    <div class="kpi-card success">
+      <div class="kpi-icon">📦</div>
+      <div class="kpi-label">Total Stok Semua Cabang</div>
+      <div class="kpi-value" style="font-size:28px">${fmt.number(totalStock)}</div>
+      <div class="kpi-change" style="font-size:11px;color:#6b7280">unit item termonitor</div>
+    </div>
+    <div class="kpi-card secondary">
+      <div class="kpi-icon">👤</div>
+      <div class="kpi-label">Kasir Aktif</div>
+      <div class="kpi-value">${totalUsers}</div>
+      <div class="kpi-change" style="font-size:11px;color:#6b7280">tersebar di seluruh cabang</div>
+    </div>
+  `;
+}
+
+function renderTable(branches) {
+  document.getElementById('branch-tbody').innerHTML = branches.map(b=>{
+    const isProd = !!b.is_production_center;
+    const icon = isProd ? '🏭' : '🏪';
+    const typeTag = isProd
+      ? '<span class="badge badge-warning">Dapur Produksi</span>'
+      : '<span class="badge badge-primary">Outlet</span>';
+    return `<tr style="${!b.is_active?'opacity:0.5':''}">
+      <td style="font-weight:700">${icon} ${b.name}</td>
+      <td>${typeTag}</td>
+      <td style="font-size:13px;color:#6b7280">${b.address||'-'}</td>
+      <td style="font-size:13px;font-family:ui-monospace,monospace">${b.phone||'-'}</td>
+      <td style="text-align:right;font-weight:800;font-family:ui-monospace,monospace">${fmt.number(b.total_stock||0)}</td>
+      <td style="text-align:center;font-size:12px;color:#6b7280">${b.tracked_item_count||0} item</td>
+      <td style="text-align:center;font-size:12px;color:#6b7280">${b.user_count||0}</td>
+      <td><span class="badge ${b.is_active?'badge-success':'badge-danger'}">${b.is_active?'Aktif':'Nonaktif'}</span></td>
+      <td><button class="btn-icon" onclick="openEditModal(${b.id})" title="Edit">✏️</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function openAddModal() {
+  document.getElementById('branch-modal-title').textContent='Tambah Cabang Baru';
+  document.getElementById('edit-branch-id').value='';
+  document.getElementById('b-name').value='';
+  document.getElementById('b-address').value='';
+  document.getElementById('b-phone').value='';
+  document.getElementById('b-production').checked=false;
+  document.getElementById('b-status-group').style.display='none';
+  openModal('branch-modal');
+}
+
+function openEditModal(id) {
+  const b = allBranches.find(x=>x.id===id);
+  if (!b) return;
+  document.getElementById('branch-modal-title').textContent='Edit Cabang';
+  document.getElementById('edit-branch-id').value=b.id;
+  document.getElementById('b-name').value=b.name;
+  document.getElementById('b-address').value=b.address||'';
+  document.getElementById('b-phone').value=b.phone||'';
+  document.getElementById('b-production').checked=!!b.is_production_center;
+  document.getElementById('b-active').value=b.is_active;
+  document.getElementById('b-status-group').style.display='';
+  openModal('branch-modal');
+}
+
+async function saveBranch() {
+  const id=document.getElementById('edit-branch-id').value;
+  const name=document.getElementById('b-name').value.trim();
+  const address=document.getElementById('b-address').value.trim();
+  const phone=document.getElementById('b-phone').value.trim();
+  const is_production_center=document.getElementById('b-production').checked?1:0;
+  const isActive=document.getElementById('b-active').value;
+  if (!name) { showToast('Nama cabang wajib diisi','warning'); return; }
+  const btn=document.getElementById('save-branch-btn'); btn.disabled=true;
+  try {
+    if (id) await API.put(`/branches/${id}`,{name,address,phone,is_production_center,is_active:parseInt(isActive)});
+    else await API.post('/branches',{name,address,phone,is_production_center});
+    showToast('Cabang berhasil disimpan','success'); closeModal('branch-modal'); await loadBranches();
+  } catch(e) { showToast(e.message,'error'); }
+  btn.disabled=false;
+}
+
+loadBranches();
+</script>
+</body>
+</html>

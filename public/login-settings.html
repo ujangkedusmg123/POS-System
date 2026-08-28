@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Tampilan Login — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.login-editor { display:grid; grid-template-columns:1fr 420px; gap:18px; align-items:start; }
+@media (max-width:1000px){ .login-editor{grid-template-columns:1fr} .preview-col{position:static !important} }
+.preview-col { position:sticky; top:80px; }
+.preview-frame { border:1px solid var(--border); border-radius:12px; overflow:hidden; background:#fff; }
+.mock-bg { padding:26px 18px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-height:430px; background-size:cover; background-position:center; transition:background .2s; }
+.mock-card { background:#fff; border-radius:14px; padding:20px 18px; width:100%; max-width:250px;
+  box-shadow:0 12px 34px rgba(0,0,0,.28); text-align:center; }
+.mock-mark { font-size:36px; line-height:1; margin-bottom:6px; }
+.mock-mark img { max-width:104px; max-height:56px; object-fit:contain; display:block; margin:0 auto; }
+.mock-title { font-size:17px; font-weight:800; color:#111827; }
+.mock-sub { font-size:10.5px; color:#6b7280; margin-top:2px; }
+.mock-welcome { font-size:11px; color:#374151; font-weight:600; margin:10px 0 12px; }
+.mock-field { text-align:left; margin-bottom:8px; }
+.mock-field span { font-size:10px; font-weight:600; color:#374151; }
+.mock-input { height:26px; border:1.5px solid #e5e7eb; border-radius:7px; margin-top:3px; background:#fff; }
+.mock-btn { margin-top:12px; padding:9px; border-radius:8px; color:#fff; font-size:12px; font-weight:700; }
+.mock-foot { margin-top:12px; font-size:10px; color:rgba(255,255,255,.85); text-align:center; min-height:12px; }
+.color-row { display:flex; gap:9px; align-items:center; }
+.color-row input[type=color] { width:48px; height:40px; padding:2px; border:1.5px solid var(--border); border-radius:8px; cursor:pointer; background:#fff; }
+.logo-box { width:120px; height:80px; border:2px dashed var(--border); border-radius:9px; display:flex; align-items:center; justify-content:center; background:var(--bg-light); overflow:hidden; }
+.logo-box img { max-width:112px; max-height:72px; object-fit:contain; }
+.hint { font-size:11px; color:var(--text-muted); line-height:1.55; margin-top:4px; }
+.preset-row { display:flex; gap:8px; flex-wrap:wrap; }
+.preset-sw { width:44px; height:34px; border-radius:8px; border:2px solid transparent; cursor:pointer; }
+.preset-sw:hover { border-color:var(--text-primary); }
+.device-btns { display:flex; gap:6px; justify-content:center; margin-bottom:10px; }
+.device-btns button { padding:6px 14px; font-size:12px; font-weight:600; border:1.5px solid var(--border); background:#fff; border-radius:8px; cursor:pointer; }
+.device-btns button.on { background:var(--primary,#1e6fe8); color:#fff; border-color:transparent; }
+</style>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">🎨 Tampilan Halaman Login</div><div class="page-subtitle">Kustomisasi logo, warna, dan teks sambutan</div></div>
+    <div class="top-bar-actions">
+      <button class="btn btn-secondary" onclick="resetDefaults()">↺ Kembalikan Bawaan</button>
+      <button class="btn btn-primary" id="save-btn" onclick="save()">💾 Simpan</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:13px;color:#1e40af;line-height:1.6">
+      🔒 Halaman login sengaja <b>tidak menampilkan petunjuk username/password</b> demi keamanan. Kredensial diberikan terpisah ke masing-masing pengguna.
+    </div>
+
+    <div class="login-editor">
+      <div>
+        <div class="card mb-4">
+          <div class="card-header"><span class="card-title">🖼️ Logo & Ikon</span></div>
+          <div class="card-body">
+            <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+              <div>
+                <div class="logo-box" id="logo-box"><span style="font-size:34px" id="logo-emoji-view">🦐</span></div>
+                <button class="btn btn-secondary btn-sm" style="margin-top:6px;width:120px" onclick="document.getElementById('logo-file').click()">Upload Logo</button>
+                <button class="btn btn-secondary btn-sm" style="margin-top:4px;width:120px;color:var(--danger)" onclick="removeLogo()">Hapus Logo</button>
+              </div>
+              <div style="flex:1;min-width:200px">
+                <input type="file" id="logo-file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none" onchange="uploadLogo(this)">
+                <div class="form-group">
+                  <label class="form-label">Emoji (dipakai bila tidak ada logo)</label>
+                  <input type="text" id="s-emoji" class="form-control" maxlength="4" placeholder="🦐" oninput="schedule()">
+                </div>
+                <div class="hint">Logo otomatis diperkecil ke lebar maks. 400px agar halaman login tetap ringan dibuka.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header"><span class="card-title">✍️ Teks</span></div>
+          <div class="card-body">
+            <div class="form-group"><label class="form-label">Judul</label>
+              <input type="text" id="s-title" class="form-control" placeholder="Ujang Kedu" oninput="schedule()"></div>
+            <div class="form-group"><label class="form-label">Subjudul</label>
+              <input type="text" id="s-subtitle" class="form-control" placeholder="Sistem Kuliner Udang Semarang" oninput="schedule()"></div>
+            <div class="form-group"><label class="form-label">Ucapan Selamat Datang</label>
+              <input type="text" id="s-welcome" class="form-control" placeholder="Selamat datang kembali" oninput="schedule()">
+              <div class="hint">Kosongkan untuk menyembunyikan baris ini.</div></div>
+            <div class="form-group" style="margin-bottom:0"><label class="form-label">Teks Kaki Halaman</label>
+              <input type="text" id="s-footer" class="form-control" placeholder="mis. © 2026 Ujang Kedu · v2.0" oninput="schedule()"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">🎨 Latar Belakang</span></div>
+          <div class="card-body">
+            <div class="grid-2">
+              <div class="form-group"><label class="form-label">Warna Awal</label>
+                <div class="color-row"><input type="color" id="s-from" value="#0f1f3d" oninput="syncColor('from');schedule()">
+                  <input type="text" id="s-from-hex" class="form-control" oninput="syncHex('from');schedule()"></div></div>
+              <div class="form-group"><label class="form-label">Warna Akhir</label>
+                <div class="color-row"><input type="color" id="s-to" value="#1e6fe8" oninput="syncColor('to');schedule()">
+                  <input type="text" id="s-to-hex" class="form-control" oninput="syncHex('to');schedule()"></div></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Palet Cepat</label>
+              <div class="preset-row" id="presets"></div>
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Gambar Latar (opsional)</label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('bg-file').click()">Upload Gambar</button>
+                <button class="btn btn-secondary btn-sm" style="color:var(--danger)" onclick="removeBg()">Hapus Gambar</button>
+                <span id="bg-status" class="hint" style="align-self:center">Belum ada gambar</span>
+              </div>
+              <input type="file" id="bg-file" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadBg(this)">
+              <div class="hint">Gambar diberi lapisan gradasi gelap otomatis agar teks tetap terbaca.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="preview-col">
+        <div class="card"><div class="card-body">
+          <div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:10px;color:var(--text-muted)">👁️ PREVIEW</div>
+          <div class="device-btns">
+            <button class="on" id="dv-desktop" onclick="setDevice('desktop')">🖥️ Desktop</button>
+            <button id="dv-mobile" onclick="setDevice('mobile')">📱 Mobile</button>
+          </div>
+          <div class="preview-frame" id="preview-frame">
+            <div id="mock-bg" class="mock-bg">
+              <div class="mock-card">
+                <div class="mock-mark" id="mock-mark">🦐</div>
+                <div class="mock-title" id="mock-title">Ujang Kedu</div>
+                <div class="mock-sub" id="mock-sub">Sistem Kuliner Udang Semarang</div>
+                <div class="mock-welcome" id="mock-welcome">Selamat datang kembali</div>
+                <div class="mock-field"><span>Username</span><div class="mock-input"></div></div>
+                <div class="mock-field"><span>Password</span><div class="mock-input"></div></div>
+                <div class="mock-btn" id="mock-btn">Masuk</div>
+              </div>
+              <div class="mock-foot" id="mock-foot"></div>
+            </div>
+          </div>
+          <p class="hint" style="text-align:center;margin-top:10px">Gambaran tampilan halaman login setelah disimpan.</p>
+        </div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+/* CATATAN PENTING — jangan bungkus ulang script ini dengan `if (...) { ... }`.
+   Deklarasi `async function` di dalam sebuah blok TIDAK terangkat ke scope
+   global (berbeda dengan `function` biasa yang terangkat lewat aturan warisan
+   Annex B). Kalau seluruh script dibungkus blok, atribut onclick pada tombol
+   tidak menemukan handler async-nya dan seluruh tombol menjadi mati.
+   Karena itu isi script berada di scope global, dan hanya baris bootstrap di
+   bagian bawah yang dijaga oleh PAGE_OK. */
+const PAGE_OK = initPage('login-settings','Tampilan Login','Kustomisasi halaman login');
+
+
+let settings = {}, logoData = '', bgData = '';
+
+const PALETTES = [
+  ['#0f1f3d','#1e6fe8'], ['#7f1d1d','#dc2626'], ['#064e3b','#059669'],
+  ['#1e1b4b','#7c3aed'], ['#431407','#ea580c'], ['#0c4a6e','#0891b2'],
+  ['#111827','#374151'], ['#500724','#be185d'],
+];
+
+document.getElementById('presets').innerHTML = PALETTES.map(([a,b]) =>
+  `<div class="preset-sw" style="background:linear-gradient(135deg,${a},${b})" title="${a} → ${b}" onclick="usePalette('${a}','${b}')"></div>`).join('');
+
+function usePalette(a,b) {
+  document.getElementById('s-from').value = a; document.getElementById('s-from-hex').value = a;
+  document.getElementById('s-to').value = b;   document.getElementById('s-to-hex').value = b;
+  schedule();
+}
+function syncColor(w){ document.getElementById('s-'+w+'-hex').value = document.getElementById('s-'+w).value; }
+function syncHex(w){
+  const v = document.getElementById('s-'+w+'-hex').value.trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(v)) document.getElementById('s-'+w).value = v;
+}
+
+async function load() {
+  try {
+    settings = await getReceiptSettings(true) || {};
+    const g = (k,d) => (settings[k]!=null && settings[k]!=='') ? settings[k] : d;
+    document.getElementById('s-title').value = g('login_title','Ujang Kedu');
+    document.getElementById('s-subtitle').value = g('login_subtitle','Sistem Kuliner Udang Semarang');
+    document.getElementById('s-welcome').value = settings.login_welcome!=null ? settings.login_welcome : 'Selamat datang kembali';
+    document.getElementById('s-footer').value = g('login_footer','');
+    document.getElementById('s-emoji').value = g('login_emoji','🦐');
+    const from = g('login_bg_from','#0f1f3d'), to = g('login_bg_to','#1e6fe8');
+    document.getElementById('s-from').value = from; document.getElementById('s-from-hex').value = from;
+    document.getElementById('s-to').value = to;     document.getElementById('s-to-hex').value = to;
+    logoData = g('login_logo','');
+    bgData = g('login_bg_image','');
+    renderLogo(); renderBgStatus(); updatePreview();
+  } catch(e) { showToast(e.message,'error'); updatePreview(); }
+}
+
+function renderLogo() {
+  const box = document.getElementById('logo-box');
+  if (logoData) box.innerHTML = `<img src="${logoData.replace(/"/g,'&quot;')}" alt="Logo">`;
+  else box.innerHTML = `<span style="font-size:34px">${document.getElementById('s-emoji').value || '🦐'}</span>`;
+}
+function renderBgStatus() {
+  document.getElementById('bg-status').textContent = bgData ? '✅ Gambar latar terpasang' : 'Belum ada gambar';
+}
+
+async function uploadLogo(input) {
+  const f = input.files && input.files[0]; if (!f) return;
+  if (!/^image\//.test(f.type)) { showToast('File harus berupa gambar','warning'); input.value=''; return; }
+  if (f.size > 4*1024*1024) { showToast('Maksimal 4MB','warning'); input.value=''; return; }
+  try {
+    const raw = await readFile(f);
+    logoData = await normalizeLogoDataUrl(raw, 400);
+    renderLogo(); schedule();
+    showToast('Logo dimuat ✅ Jangan lupa Simpan','success');
+  } catch(e) { showToast('Gagal memuat logo: '+(e.message||e),'error'); }
+  input.value='';
+}
+
+async function uploadBg(input) {
+  const f = input.files && input.files[0]; if (!f) return;
+  if (!/^image\//.test(f.type)) { showToast('File harus berupa gambar','warning'); input.value=''; return; }
+  if (f.size > 12*1024*1024) { showToast('Ukuran file maksimal 12MB','warning'); input.value=''; return; }
+  showToast('Memproses gambar...','info',1500);
+  try {
+    const raw = await readFile(f);
+    // Foto latar dikompres sebagai JPEG bertahap. Versi lama memaksa PNG,
+    // sehingga foto membengkak jadi beberapa MB lalu ditolak diam-diam.
+    const out = await compressBackgroundImage(raw, 900*1024);
+    if (!out) {
+      showToast('Gambar ini sulit dikompres. Coba foto dengan resolusi lebih kecil.','warning',6000);
+      input.value=''; return;
+    }
+    bgData = out;
+    renderBgStatus(); schedule();
+    showToast('Gambar latar dimuat (' + Math.round(bgData.length/1024) + ' KB) ✅ Jangan lupa Simpan','success');
+  } catch(e) { showToast('Gagal memuat gambar: '+(e.message||e),'error'); }
+  input.value='';
+}
+
+function readFile(f) {
+  return new Promise((ok,no)=>{ const r=new FileReader(); r.onload=()=>ok(r.result); r.onerror=()=>no(new Error('Gagal membaca file')); r.readAsDataURL(f); });
+}
+function removeLogo(){ logoData=''; renderLogo(); schedule(); }
+function removeBg(){ bgData=''; renderBgStatus(); schedule(); }
+
+function collect() {
+  return {
+    login_title: document.getElementById('s-title').value.trim() || 'Ujang Kedu',
+    login_subtitle: document.getElementById('s-subtitle').value.trim(),
+    login_welcome: document.getElementById('s-welcome').value.trim(),
+    login_footer: document.getElementById('s-footer').value.trim(),
+    login_emoji: document.getElementById('s-emoji').value.trim() || '🦐',
+    login_logo: logoData,
+    login_bg_from: document.getElementById('s-from').value,
+    login_bg_to: document.getElementById('s-to').value,
+    login_bg_image: bgData,
+  };
+}
+
+let _t=null;
+function schedule(){ clearTimeout(_t); _t=setTimeout(()=>{ renderLogo(); updatePreview(); }, 250); }
+
+/* Preview digambar langsung di halaman ini (mock), BUKAN lewat iframe.
+   Versi lama memuat /login.html di dalam iframe, padahal halaman itu otomatis
+   mengalihkan pengguna yang sudah login ke dashboard — akibatnya preview justru
+   menampilkan dashboard lengkap dengan sidebar yang tumpang tindih. */
+function updatePreview() {
+  const cfg = collect();
+  const $ = (id) => document.getElementById(id);
+
+  $('mock-title').textContent = cfg.login_title || 'Ujang Kedu';
+  $('mock-sub').textContent = cfg.login_subtitle || '';
+  $('mock-sub').style.display = cfg.login_subtitle ? '' : 'none';
+  $('mock-welcome').textContent = cfg.login_welcome || '';
+  $('mock-welcome').style.display = cfg.login_welcome ? '' : 'none';
+  $('mock-foot').textContent = cfg.login_footer || '';
+
+  const mark = $('mock-mark');
+  if (cfg.login_logo) {
+    mark.innerHTML = '';
+    const img = document.createElement('img');
+    img.alt = 'Logo';
+    img.onerror = () => { mark.textContent = cfg.login_emoji || '🦐'; };
+    img.src = cfg.login_logo;
+    mark.appendChild(img);
+  } else {
+    mark.textContent = cfg.login_emoji || '🦐';
+  }
+
+  const from = cfg.login_bg_from || '#0f1f3d';
+  const to   = cfg.login_bg_to   || '#1e6fe8';
+  const bg = $('mock-bg');
+  bg.style.backgroundImage = cfg.login_bg_image
+    ? `linear-gradient(135deg, rgba(15,31,61,.82), rgba(30,111,232,.72)), url("${cfg.login_bg_image.replace(/"/g,'&quot;')}")`
+    : `linear-gradient(135deg, ${from} 0%, ${to} 100%)`;
+  $('mock-btn').style.background = `linear-gradient(135deg, ${from}, ${to})`;
+  $('mock-btn').textContent = 'Masuk';
+}
+
+function setDevice(d) {
+  document.getElementById('dv-desktop').classList.toggle('on', d === 'desktop');
+  document.getElementById('dv-mobile').classList.toggle('on', d === 'mobile');
+  const frame = document.getElementById('preview-frame');
+  frame.style.maxWidth = d === 'mobile' ? '300px' : '';
+  frame.style.margin = d === 'mobile' ? '0 auto' : '';
+}
+
+async function save() {
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true; const old = btn.textContent; btn.textContent = 'Menyimpan...';
+  try {
+    await API.post('/settings', collect());
+    clearReceiptCache();
+    await getReceiptSettings(true);
+    showToast('Tampilan login tersimpan ✅','success');
+  } catch(e) { showToast(e.message,'error'); }
+  btn.disabled = false; btn.textContent = old;
+}
+
+function resetDefaults() {
+  confirmDialog('Kembalikan tampilan login ke bawaan sistem?', () => {
+    document.getElementById('s-title').value='Ujang Kedu';
+    document.getElementById('s-subtitle').value='Sistem Kuliner Udang Semarang';
+    document.getElementById('s-welcome').value='Selamat datang kembali';
+    document.getElementById('s-footer').value='';
+    document.getElementById('s-emoji').value='🦐';
+    usePalette('#0f1f3d','#1e6fe8');
+    logoData=''; bgData=''; renderLogo(); renderBgStatus(); schedule();
+    showToast('Nilai bawaan dimuat — klik Simpan untuk menerapkan','info');
+  }, 'Kembalikan Bawaan');
+}
+
+if (PAGE_OK) {
+  load();
+}
+</script>
+</body>
+</html>

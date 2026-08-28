@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dapur / Antrian Masak — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  /* ====== LAYAR DAPUR ======================================================
+     Dipakai sambil berdiri di depan wajan: target sentuh besar, angka besar,
+     warna menyatakan seberapa lama pesanan sudah menunggu. */
+  .kd-toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; background:var(--bg-card);
+    border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; margin-bottom:14px; }
+  .kd-toolbar label { font-size:11px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.4px; }
+  .kd-toolbar .form-control { height:36px; padding:4px 8px; width:auto; }
+  .kd-sep { width:1px; height:26px; background:var(--border); }
+
+  .kd-tabs { display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+  .kd-tab { padding:9px 16px; border-radius:999px; border:1px solid var(--border); background:var(--bg-card);
+    cursor:pointer; font-weight:700; font-size:13px; color:var(--text-secondary); display:flex; align-items:center; gap:7px; }
+  .kd-tab.active { background:var(--primary); border-color:var(--primary); color:#fff; }
+  .kd-tab .kd-count { background:rgba(0,0,0,.12); border-radius:999px; padding:1px 8px; font-size:11px; }
+  .kd-tab.active .kd-count { background:rgba(255,255,255,.25); }
+
+  .kd-stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:14px; }
+  .kd-stat { background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; }
+  .kd-stat .v { font-size:24px; font-weight:800; font-family:var(--font-mono); line-height:1.1; }
+  .kd-stat .l { font-size:11px; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.4px; font-weight:700; }
+
+  .kd-board { display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:14px; align-items:start; }
+
+  /* ---- Kartu pesanan ---- */
+  .kd-card { background:var(--bg-card); border:1px solid var(--border); border-left:6px solid var(--text-muted);
+    border-radius:var(--radius); box-shadow:var(--shadow-sm); overflow:hidden; }
+  .kd-card.fresh  { border-left-color:var(--success); }
+  .kd-card.warn   { border-left-color:var(--warning); }
+  .kd-card.late   { border-left-color:var(--danger); }
+  .kd-card.cooking{ background:#fffdf5; }
+  .kd-card.done   { opacity:.62; border-left-color:var(--success); }
+
+  .kd-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; padding:11px 13px; border-bottom:1px solid var(--border); }
+  .kd-inv { font-family:var(--font-mono); font-weight:800; font-size:13px; }
+  .kd-meta { font-size:11px; color:var(--text-secondary); margin-top:3px; display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .kd-elapsed { font-family:var(--font-mono); font-weight:800; font-size:19px; line-height:1; text-align:right; white-space:nowrap; }
+  .kd-elapsed.fresh { color:var(--success); }
+  .kd-elapsed.warn  { color:var(--warning); }
+  .kd-elapsed.late  { color:var(--danger); }
+  .kd-elapsed small { display:block; font-size:9px; font-weight:700; letter-spacing:.4px; color:var(--text-muted); margin-top:2px; }
+
+  .kd-items { list-style:none; }
+  .kd-item { display:flex; align-items:center; gap:11px; padding:10px 13px; border-bottom:1px dashed var(--border); cursor:pointer; user-select:none; }
+  .kd-item:last-child { border-bottom:0; }
+  .kd-item:hover { background:var(--primary-light); }
+  .kd-item.is-done { background:#f6faf7; }
+  .kd-item.is-done .kd-item-name { text-decoration:line-through; color:var(--text-muted); }
+  .kd-item.locked { cursor:not-allowed; opacity:.75; }
+  .kd-box { width:24px; height:24px; min-width:24px; border-radius:7px; border:2px solid var(--border-hover);
+    display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:transparent; background:#fff; }
+  .kd-item.is-done .kd-box { background:var(--success); border-color:var(--success); color:#fff; }
+  .kd-item.is-cooking .kd-box { border-color:var(--warning); color:var(--warning); background:var(--warning-light); }
+  .kd-item-name { font-weight:700; font-size:14px; flex:1; line-height:1.25; }
+  .kd-item-sub { display:block; font-size:11px; color:var(--text-muted); font-weight:600; margin-top:2px; }
+  .kd-qty { font-family:var(--font-mono); font-weight:800; font-size:16px; white-space:nowrap; }
+  .kd-foot { display:flex; gap:8px; padding:10px 13px; background:#fafbfc; border-top:1px solid var(--border); }
+  .kd-foot .btn { flex:1; font-size:12px; padding:9px 6px; }
+
+  /* ---- Kartu batch (gabung goreng) ---- */
+  .kd-batch { background:var(--bg-card); border:1px solid var(--border); border-top:5px solid var(--primary);
+    border-radius:var(--radius); box-shadow:var(--shadow-sm); overflow:hidden; }
+  .kd-batch.cooking { border-top-color:var(--warning); background:#fffdf5; }
+  .kd-batch.late { border-top-color:var(--danger); }
+  .kd-batch-head { padding:12px 14px; }
+  .kd-batch-title { font-size:16px; font-weight:800; line-height:1.2; }
+  .kd-batch-qty { font-family:var(--font-mono); font-size:34px; font-weight:800; line-height:1; color:var(--primary); }
+  .kd-batch.cooking .kd-batch-qty { color:var(--warning); }
+  .kd-batch-sub { font-size:11px; color:var(--text-secondary); margin-top:5px; }
+  .kd-chips { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 12px; }
+  .kd-chip { font-family:var(--font-mono); font-size:11px; font-weight:700; background:var(--bg-main);
+    border:1px solid var(--border); border-radius:999px; padding:3px 9px; }
+  .kd-chip.is-cooking { background:var(--warning-light); border-color:var(--warning); color:#92400e; }
+
+  .kd-empty { text-align:center; padding:56px 20px; color:var(--text-muted); background:var(--bg-card);
+    border:1px dashed var(--border); border-radius:var(--radius); }
+  .kd-empty .ico { font-size:44px; display:block; margin-bottom:10px; }
+
+  .kd-live { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:var(--text-secondary); }
+  .kd-dot { width:8px; height:8px; border-radius:50%; background:var(--success); animation:kdpulse 2s infinite; }
+  @keyframes kdpulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+  @keyframes kdflash { 0%,100%{box-shadow:var(--shadow-sm)} 50%{box-shadow:0 0 0 4px var(--danger-light)} }
+  .kd-card.late { animation:kdflash 2.4s infinite; }
+
+  /* Mode layar penuh: sidebar disembunyikan, papan memakai seluruh layar */
+  body.kd-full #sidebar, body.kd-full #mobile-menu-toggle { display:none; }
+  body.kd-full #main-content { margin-left:0; }
+  body.kd-full .kd-board { grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); }
+</style>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div>
+      <div class="page-title" id="page-title">👨‍🍳 Dapur / Antrian Masak</div>
+      <div class="page-subtitle" id="page-subtitle">Pesanan masuk otomatis dari kasir</div>
+    </div>
+    <div class="top-bar-actions">
+      <span class="kd-live"><span class="kd-dot" id="kd-dot"></span><span id="kd-live-text">Live</span></span>
+      <button class="btn btn-secondary btn-sm" id="kd-sound-btn" onclick="toggleSound()">🔔 Suara: ON</button>
+      <button class="btn btn-secondary btn-sm" onclick="toggleFullscreen()">⛶ Layar Penuh</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="kd-stats" id="kd-stats"></div>
+
+    <div class="kd-toolbar">
+      <div id="kd-branch-wrap" style="display:none">
+        <label>Cabang</label><br>
+        <select id="kd-branch" class="form-control" onchange="onFilterChange()"><option value="">Semua Cabang</option></select>
+      </div>
+      <div class="kd-sep" id="kd-branch-sep" style="display:none"></div>
+      <div>
+        <label>Gabung pesanan dalam</label><br>
+        <select id="kd-window" class="form-control" onchange="onFilterChange()">
+          <option value="5">5 menit</option>
+          <option value="10" selected>10 menit</option>
+          <option value="15">15 menit</option>
+          <option value="30">30 menit</option>
+          <option value="60">1 jam</option>
+          <option value="240">Tanpa batas waktu</option>
+        </select>
+      </div>
+      <div>
+        <label>Maks. per wajan</label><br>
+        <input type="number" id="kd-maxbatch" class="form-control font-mono" min="0" step="1" value="0" style="width:96px" onchange="onFilterChange()">
+      </div>
+      <div style="flex:1;min-width:120px"></div>
+      <div style="font-size:11px;color:var(--text-muted);max-width:320px;line-height:1.4">
+        Batch dibentuk dari produk <strong>sejenis</strong> yang pesanannya <strong>berdekatan</strong>.
+        Isi <strong>0</strong> pada maks. per wajan untuk tanpa batas.
+      </div>
+    </div>
+
+    <div class="kd-tabs">
+      <div class="kd-tab active" data-tab="orders"  onclick="switchTab('orders')">📋 Per Pesanan <span class="kd-count" id="cnt-orders">0</span></div>
+      <div class="kd-tab"        data-tab="batches" onclick="switchTab('batches')">🔥 Gabung Goreng <span class="kd-count" id="cnt-batches">0</span></div>
+      <div class="kd-tab"        data-tab="done"    onclick="switchTab('done')">✅ Selesai Hari Ini <span class="kd-count" id="cnt-done">0</span></div>
+    </div>
+
+    <div id="kd-view"></div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+if (initPage('kitchen', '👨‍🍳 Dapur / Antrian Masak', 'Pesanan masuk otomatis dari kasir') !== false) {
+
+/* ==========================================================================
+   Layar dapur.
+   Server tetap jadi pemegang kebenaran status: setiap centang dikirim ke API
+   lalu antrian ditarik ulang. Perubahan lokal hanya dipakai supaya sentuhan
+   terasa instan, tidak pernah dianggap sebagai hasil akhir.
+   ========================================================================== */
+const POLL_MS = 5000;
+
+const state = {
+  tab: 'orders',
+  data: { tickets: [], batches: [], stats: {} },
+  history: [],
+  seenTickets: new Set(),
+  firstLoad: true,
+  busy: false,
+  lastSignature: '',
+};
+
+const canCook   = Perms.can('kitchen.cook');
+const canManage = Perms.can('kitchen.manage');
+
+/* ------------------------------------------------------------- PREFERENSI */
+// Preferensi tampilan disimpan per perangkat: layar dapur dan layar kantor
+// wajar punya setelan berbeda.
+const PREF_KEY = 'kd_prefs_v1';
+function loadPrefs() {
+  try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}'); } catch (e) { return {}; }
+}
+function savePrefs(p) {
+  try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch (e) {}
+}
+let prefs = Object.assign({ window: 10, maxBatch: 0, sound: true, branch: '' }, loadPrefs());
+
+document.getElementById('kd-window').value = String(prefs.window);
+document.getElementById('kd-maxbatch').value = String(prefs.maxBatch);
+updateSoundBtn();
+
+function onFilterChange() {
+  prefs.window = parseInt(document.getElementById('kd-window').value) || 10;
+  prefs.maxBatch = Math.max(0, parseInt(document.getElementById('kd-maxbatch').value) || 0);
+  const b = document.getElementById('kd-branch');
+  prefs.branch = b ? b.value : '';
+  savePrefs(prefs);
+  refresh(true);
+}
+function toggleSound() { prefs.sound = !prefs.sound; savePrefs(prefs); updateSoundBtn(); }
+function updateSoundBtn() {
+  const b = document.getElementById('kd-sound-btn');
+  b.textContent = prefs.sound ? '🔔 Suara: ON' : '🔕 Suara: OFF';
+  b.className = 'btn btn-sm ' + (prefs.sound ? 'btn-secondary' : 'btn-outline');
+}
+function toggleFullscreen() {
+  document.body.classList.toggle('kd-full');
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+  else document.exitFullscreen?.().catch(() => {});
+}
+
+/* ------------------------------------------------------------------ WAKTU */
+/** Selisih menit antara sekarang dan waktu pesanan (datetime WIB dari server). */
+function minutesSince(iso) {
+  const d = fmt._parse(iso);
+  if (!d) return 0;
+  return Math.max(0, (Date.now() - d.getTime()) / 60000);
+}
+function elapsedText(iso) {
+  const m = minutesSince(iso);
+  if (m < 60) return Math.floor(m) + ':' + String(Math.floor((m * 60) % 60)).padStart(2, '0');
+  return Math.floor(m / 60) + 'j ' + Math.floor(m % 60) + 'm';
+}
+/** Kelas urgensi: hijau <5 menit, kuning 5–10, merah >10. */
+function urgency(iso) {
+  const m = minutesSince(iso);
+  return m >= 10 ? 'late' : (m >= 5 ? 'warn' : 'fresh');
+}
+
+/* ---------------------------------------------------------------- DATA */
+function queryString() {
+  const p = new URLSearchParams({ window: prefs.window, max_batch: prefs.maxBatch });
+  if (prefs.branch) p.set('branch_id', prefs.branch);
+  return p.toString();
+}
+
+async function refresh(force) {
+  try {
+    const data = await API.get('/kitchen/queue?' + queryString());
+    setLive(true);
+
+    // Pesanan baru masuk -> bunyi + notifikasi, supaya juru masak tidak perlu
+    // memelototi layar terus-menerus.
+    const ids = data.tickets.map((t) => t.id);
+    if (!state.firstLoad) {
+      const baru = ids.filter((id) => !state.seenTickets.has(id));
+      if (baru.length) {
+        if (prefs.sound) { try { playTone('cash', 0.32); } catch (e) {} }
+        showToast(`${baru.length} pesanan baru masuk ke dapur`, 'info');
+      }
+    }
+    state.seenTickets = new Set(ids);
+    state.firstLoad = false;
+    state.data = data;
+
+    if (state.tab === 'done') await loadHistory();
+    renderCounts();
+
+    // Hindari menggambar ulang tanpa perlu — kalau juru masak sedang
+    // mengarahkan jari ke sebuah kotak, papan yang berkedip tiap 5 detik
+    // membuat salah centang.
+    const sig = JSON.stringify({ t: state.tab, d: data.tickets.map((t) => [t.id, t.status, t.items.map((i) => i.id + i.status).join('')]), b: data.batches.map((b) => b.key + b.total_qty + b.status), h: state.history.length });
+    if (force || sig !== state.lastSignature) { state.lastSignature = sig; render(); }
+  } catch (e) {
+    setLive(false, e.message);
+  }
+}
+
+async function loadHistory() {
+  try {
+    const r = await API.get('/kitchen/history' + (prefs.branch ? '?branch_id=' + prefs.branch : ''));
+    state.history = r.tickets || [];
+  } catch (e) { state.history = []; }
+}
+
+function setLive(ok, msg) {
+  const dot = document.getElementById('kd-dot');
+  const txt = document.getElementById('kd-live-text');
+  dot.style.background = ok ? 'var(--success)' : 'var(--danger)';
+  txt.textContent = ok ? 'Live' : 'Terputus';
+  txt.title = msg || '';
+}
+
+/* --------------------------------------------------------------- RENDER */
+function renderCounts() {
+  const s = state.data.stats || {};
+  document.getElementById('cnt-orders').textContent = state.data.tickets.length;
+  document.getElementById('cnt-batches').textContent = (state.data.batches || []).length;
+  document.getElementById('cnt-done').textContent = s.selesai_hari_ini || 0;
+
+  document.getElementById('kd-stats').innerHTML = [
+    ['🧾', s.antrian || 0, 'Pesanan antri', 'var(--primary)'],
+    ['🔥', s.cooking || 0, 'Sedang digoreng', 'var(--warning)'],
+    ['🍤', Math.round(s.qty_outstanding || 0), 'Belum matang', 'var(--danger)'],
+    ['✅', s.selesai_hari_ini || 0, 'Selesai hari ini', 'var(--success)'],
+  ].map(([ico, v, l, c]) => `<div class="kd-stat"><div class="l">${ico} ${l}</div><div class="v" style="color:${c}">${v}</div></div>`).join('');
+}
+
+function switchTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll('.kd-tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === tab));
+  if (tab === 'done') loadHistory().then(render); else render();
+}
+
+function render() {
+  const box = document.getElementById('kd-view');
+  if (state.tab === 'orders')  box.innerHTML = renderOrders();
+  else if (state.tab === 'batches') box.innerHTML = renderBatches();
+  else box.innerHTML = renderDone();
+  tickTimers();
+}
+
+function channelBadge(ch) {
+  const map = { langsung: ['Dine-in', 'var(--primary)'], gofood: ['GoFood', '#e2482a'], grabfood: ['GrabFood', '#00b14f'], shopeefood: ['ShopeeFood', '#ee4d2d'], takeaway: ['Take Away', '#6b7280'] };
+  const [label, color] = map[ch] || [ch || 'Langsung', '#6b7280'];
+  return `<span style="background:${color};color:#fff;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:800">${escHtml(label)}</span>`;
+}
+
+function renderOrders() {
+  const list = state.data.tickets || [];
+  if (!list.length) return emptyBox('🍳', 'Belum ada pesanan', 'Transaksi yang disimpan kasir akan muncul di sini secara otomatis.');
+
+  return `<div class="kd-board">` + list.map((t) => {
+    const u = urgency(t.created_at);
+    const cls = [u, t.status === 'cooking' ? 'cooking' : ''].filter(Boolean).join(' ');
+    const items = t.items.map((i) => {
+      const done = i.status === 'done';
+      const cooking = i.status === 'cooking';
+      const locked = !canCook || (done && !canManage);
+      return `<li class="kd-item ${done ? 'is-done' : ''} ${cooking ? 'is-cooking' : ''} ${locked ? 'locked' : ''}"
+          ${locked ? '' : `onclick="toggleItem(${i.id}, '${i.status}')"`}>
+        <span class="kd-box">${done ? '✓' : (cooking ? '🔥' : '')}</span>
+        <span class="kd-item-name">${escHtml(i.product_name)}
+          ${i.parent_name ? `<span class="kd-item-sub">↳ bagian dari ${escHtml(i.parent_name)}</span>` : ''}</span>
+        <span class="kd-qty">${fmt.number(i.qty)}<span style="font-size:10px;color:var(--text-muted)"> ${escHtml(i.unit || '')}</span></span>
+      </li>`;
+    }).join('');
+
+    return `<div class="kd-card ${cls}">
+      <div class="kd-head">
+        <div>
+          <div class="kd-inv">#${escHtml(t.invoice_number || '-')}</div>
+          <div class="kd-meta">${channelBadge(t.channel)}
+            <span>${escHtml(t.customer_name || 'Pelanggan Umum')}</span>
+            <span>· ${fmt.time(t.created_at)}</span></div>
+          ${t.notes ? `<div style="margin-top:6px;font-size:11px;background:var(--warning-light);color:#92400e;border-radius:6px;padding:4px 7px"><strong>Catatan:</strong> ${escHtml(t.notes)}</div>` : ''}
+        </div>
+        <div class="kd-elapsed ${u}" data-since="${escHtml(t.created_at)}">${elapsedText(t.created_at)}<small>MENUNGGU</small></div>
+      </div>
+      <ul class="kd-items">${items}</ul>
+      ${canCook ? `<div class="kd-foot">
+        ${t.status === 'pending' ? `<button class="btn btn-warning" onclick="setTicket(${t.id},'cooking')">🔥 Mulai Goreng</button>` : ''}
+        <button class="btn btn-success" onclick="setTicket(${t.id},'done')">✅ Semua Selesai</button>
+        ${canManage ? `<button class="btn btn-secondary" style="flex:0 0 auto" title="Batalkan tiket dapur" onclick="cancelTicket(${t.id},'${escHtml(t.invoice_number)}')">🗑️</button>` : ''}
+      </div>` : ''}
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+function renderBatches() {
+  const list = state.data.batches || [];
+  if (!list.length) return emptyBox('🔥', 'Tidak ada yang perlu digoreng', 'Semua item pada antrian sudah matang.');
+
+  const win = state.data.window;
+  return `<div style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">
+      Item produk sejenis yang pesanannya berjarak ≤ <strong>${win} menit</strong> digabung jadi satu batch${state.data.max_batch ? `, dipotong tiap <strong>${state.data.max_batch}</strong> — satu baris pesanan tidak pernah dipecah, jadi batch bisa sedikit melebihi angka ini` : ''}.
+      Sekali tekan <em>Matang Semua</em>, seluruh pesanan di dalam batch ikut tercentang.
+    </div><div class="kd-board">` + list.map((b) => {
+    const late = urgency(b.first_order_at) === 'late';
+    const chips = b.items.map((i) => `<span class="kd-chip ${i.status === 'cooking' ? 'is-cooking' : ''}" title="${fmt.time(i.order_at)}">#${escHtml(String(i.invoice_number || '').slice(-4))} · ${fmt.number(i.qty)}${i.parent_name ? ' 🎲' : ''}</span>`).join('');
+    return `<div class="kd-batch ${b.status === 'cooking' ? 'cooking' : ''} ${late ? 'late' : ''}">
+      <div class="kd-batch-head">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+          <div style="flex:1">
+            <div class="kd-batch-title">${escHtml(b.product_name)}</div>
+            <div class="kd-batch-sub">dari <strong>${b.order_count}</strong> pesanan ·
+              pesanan terlama <span class="kd-elapsed ${urgency(b.first_order_at)}" style="font-size:12px;display:inline"
+              data-since="${escHtml(b.first_order_at)}">${elapsedText(b.first_order_at)}</span> lalu</div>
+          </div>
+          <div style="text-align:right">
+            <div class="kd-batch-qty">${fmt.number(b.total_qty)}</div>
+            <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase">${escHtml(b.unit || 'pcs')}</div>
+          </div>
+        </div>
+      </div>
+      <div class="kd-chips">${chips}</div>
+      ${canCook ? `<div class="kd-foot">
+        ${b.status !== 'cooking' ? `<button class="btn btn-warning" onclick='setBatch(${JSON.stringify(b.item_ids)},"cooking")'>🔥 Turun Wajan</button>` : ''}
+        <button class="btn btn-success" onclick='setBatch(${JSON.stringify(b.item_ids)},"done")'>✅ Matang Semua</button>
+      </div>` : ''}
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+function renderDone() {
+  const list = state.history || [];
+  if (!list.length) return emptyBox('✅', 'Belum ada yang selesai hari ini', 'Pesanan yang sudah dicentang tuntas akan tercatat di sini.');
+  return `<div class="kd-board">` + list.map((t) => {
+    const cancelled = t.status === 'cancelled';
+    const menit = t.done_at ? Math.max(0, Math.round((fmt._parse(t.done_at) - fmt._parse(t.created_at)) / 60000)) : null;
+    return `<div class="kd-card done">
+      <div class="kd-head">
+        <div>
+          <div class="kd-inv">#${escHtml(t.invoice_number || '-')}</div>
+          <div class="kd-meta">${channelBadge(t.channel)}
+            <span>${cancelled ? '❌ Dibatalkan' : '✅ ' + fmt.time(t.done_at)}</span></div>
+        </div>
+        <div style="text-align:right;font-size:11px;color:var(--text-secondary)">
+          ${menit !== null && !cancelled ? `<strong style="font-size:16px;font-family:var(--font-mono)">${menit}</strong><br>menit masak` : ''}
+        </div>
+      </div>
+      <ul class="kd-items">${t.items.map((i) => `<li class="kd-item is-done locked">
+        <span class="kd-box">${cancelled ? '✕' : '✓'}</span>
+        <span class="kd-item-name">${escHtml(i.product_name)}</span>
+        <span class="kd-qty">${fmt.number(i.qty)}</span></li>`).join('')}</ul>
+      ${canManage && !cancelled ? `<div class="kd-foot"><button class="btn btn-secondary" onclick="setTicket(${t.id},'pending')">↩️ Buka Lagi</button></div>` : ''}
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+function emptyBox(ico, title, sub) {
+  return `<div class="kd-empty"><span class="ico">${ico}</span>
+    <div style="font-size:16px;font-weight:700;color:var(--text-secondary)">${title}</div>
+    <div style="font-size:13px;margin-top:5px">${sub}</div></div>`;
+}
+
+/* Timer berjalan tiap detik tanpa menggambar ulang seluruh papan. */
+function tickTimers() {
+  document.querySelectorAll('[data-since]').forEach((el) => {
+    const since = el.dataset.since;
+    const node = el.firstChild;
+    if (node && node.nodeType === 3) node.nodeValue = elapsedText(since);
+    const u = urgency(since);
+    el.classList.remove('fresh', 'warn', 'late');
+    el.classList.add(u);
+    // Kartunya ikut berubah warna saat pesanan mulai kelamaan, tanpa harus
+    // menunggu papan digambar ulang.
+    const card = el.closest('.kd-card');
+    if (card && !card.classList.contains('done')) {
+      card.classList.remove('fresh', 'warn', 'late');
+      card.classList.add(u);
+    }
+  });
+}
+
+/* ------------------------------------------------------------------ AKSI */
+async function toggleItem(itemId, currentStatus) {
+  if (state.busy) return;
+  const next = currentStatus === 'done' ? 'pending' : 'done';
+  await sendAction(() => API.patch('/kitchen/items/' + itemId, { status: next }), next === 'done' ? null : 'Item dibuka kembali');
+}
+
+async function setTicket(ticketId, status) {
+  if (state.busy) return;
+  const label = status === 'done' ? 'Pesanan selesai' : (status === 'cooking' ? 'Mulai digoreng' : 'Pesanan dibuka kembali');
+  await sendAction(() => API.patch('/kitchen/tickets/' + ticketId, { status }), label);
+}
+
+function cancelTicket(ticketId, inv) {
+  confirmDialog(`Batalkan tiket dapur <strong>#${inv}</strong>?<br><small>Transaksi penjualannya tidak ikut dibatalkan.</small>`, async () => {
+    await sendAction(() => API.patch('/kitchen/tickets/' + ticketId, { status: 'cancelled' }), 'Tiket dapur dibatalkan');
+  }, 'Batalkan Tiket Dapur');
+}
+
+async function setBatch(itemIds, status) {
+  if (state.busy) return;
+  const r = await sendAction(() => API.post('/kitchen/batch', { item_ids: itemIds, status }), null);
+  if (r) showToast(status === 'done' ? `Matang: ${r.items} item di ${r.tickets} pesanan` : `${r.items} item turun wajan`, 'success');
+}
+
+/** Jalankan aksi, lalu tarik ulang antrian supaya layar selalu ikut server. */
+async function sendAction(fn, successMsg) {
+  state.busy = true;
+  try {
+    const r = await fn();
+    if (successMsg) showToast(successMsg, 'success');
+    if (prefs.sound) { try { playTone('beep', 0.18); } catch (e) {} }
+    await refresh(true);
+    return r;
+  } catch (e) {
+    showToast(e.message, 'error');
+    await refresh(true);
+    return null;
+  } finally { state.busy = false; }
+}
+
+/* ------------------------------------------------- DAFTARKAN HANDLER UI
+   Seluruh skrip halaman ini hidup di dalam blok `if (initPage(...))`, jadi
+   deklarasi `async function` TIDAK otomatis jadi milik `window` — dan atribut
+   onclick pada markup yang digambar ulang hanya bisa memanggil yang global.
+   Karena itu handler-nya dipasang eksplisit di sini. */
+Object.assign(window, {
+  toggleItem, setTicket, cancelTicket, setBatch,
+  switchTab, onFilterChange, toggleSound, toggleFullscreen,
+});
+
+/* -------------------------------------------------------------- START-UP */
+async function loadBranches() {
+  const user = Auth.getUser();
+  if (user && user.role !== 'admin' && user.branch_id) return; // kasir/dapur dikunci ke cabangnya
+  try {
+    const list = await API.get('/kitchen/meta/branches');
+    if (!list || list.length < 2) return;
+    const sel = document.getElementById('kd-branch');
+    sel.innerHTML = '<option value="">Semua Cabang</option>' +
+      list.map((b) => `<option value="${b.id}">${escHtml(b.name)}</option>`).join('');
+    sel.value = prefs.branch || '';
+    document.getElementById('kd-branch-wrap').style.display = '';
+    document.getElementById('kd-branch-sep').style.display = '';
+  } catch (e) {}
+}
+
+loadBranches().then(() => refresh(true));
+setInterval(() => refresh(false), POLL_MS);
+setInterval(tickTimers, 1000);
+// Kembali ke tab ini setelah lama ditinggal -> segarkan segera, jangan tunggu poll
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(true); });
+
+}
+</script>
+</body>
+</html>

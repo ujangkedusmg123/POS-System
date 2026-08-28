@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pengaturan — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  background:white; border:1px solid var(--border); border-radius:8px;
+  padding:16px; font-family:'Courier New',monospace; font-size:12px;
+  max-width:280px; margin:0 auto; line-height:1.5;
+}
+</style>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+<div id="main-content">
+  <div class="top-bar"><div><div class="page-title">⚙️ Pengaturan</div><div class="page-subtitle">Konfigurasi struk, akun, dan data</div></div></div>
+  <div class="page-content">
+
+    <!-- Pengaturan struk sekarang punya halamannya sendiri (Pengaturan Struk),
+         lengkap dengan preview 1:1. Form duplikat di sini dihapus supaya tidak
+         ada dua tempat mengatur hal yang sama (sumber kebingungan & data bentrok). -->
+    <div class="card mb-4">
+      <div class="card-header"><span class="card-title">🧾 Struk / Faktur</span></div>
+      <div class="card-body" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+        <div style="flex:1;min-width:240px">
+          <p style="font-size:13.5px;color:var(--text-secondary);margin:0;line-height:1.6">
+            Pengaturan struk (logo, ukuran kertas, margin, dan isi struk) dikelola di
+            halaman tersendiri lengkap dengan pratinjau ukuran asli.
+          </p>
+        </div>
+        <a class="btn btn-primary" href="/struk.html" data-perm="settings.receipt">🖨️ Buka Pengaturan Struk</a>
+      </div>
+    </div>
+
+    <!-- Ganti Password -->
+    <div class="card mb-4">
+      <div class="card-header"><span class="card-title">🔑 Ganti Password</span></div>
+      <div class="card-body" style="max-width:380px">
+        <div class="form-group"><label class="form-label">Password Lama</label><input type="password" id="old-pw" class="form-control"></div>
+        <div class="form-group"><label class="form-label">Password Baru</label><input type="password" id="new-pw" class="form-control" placeholder="Min. 6 karakter"></div>
+        <div class="form-group"><label class="form-label">Konfirmasi Password Baru</label><input type="password" id="confirm-pw" class="form-control"></div>
+        <button class="btn btn-primary" onclick="changePassword()">💾 Simpan Password</button>
+      </div>
+    </div>
+
+    <!-- Generate Dummy -->
+    <div class="card mb-4" id="dummy-zone">
+      <div class="card-header" style="background:rgba(14,165,160,0.05)"><span class="card-title" style="color:var(--secondary)">🎲 Generate Data Dummy</span></div>
+      <div class="card-body">
+        <p style="font-size:14px;color:var(--text-secondary);margin-bottom:12px">Generate data penjualan dummy 30 hari untuk uji coba. Mencakup semua channel, produk, beban HPP & operasional, dan log stok.</p>
+        <button class="btn btn-secondary" id="gen-btn" onclick="generateDummy()" style="border-color:var(--secondary);color:var(--secondary)">🎲 Generate 30 Hari Data Dummy</button>
+        <div id="gen-result" style="margin-top:10px;font-size:13px;font-weight:600"></div>
+      </div>
+    </div>
+
+    <!-- Danger Zone -->
+    <div class="card" style="border:2px solid var(--danger)" id="danger-zone">
+      <div class="card-header" style="background:rgba(220,38,38,0.05)"><span class="card-title" style="color:var(--danger)">⚠️ Hapus Semua Data Transaksi</span></div>
+      <div class="card-body">
+        <p style="font-size:14px;color:var(--text-secondary);margin-bottom:12px">Menghapus semua data transaksi, beban, dan log stok. Data produk, user, dan cabang <strong>tidak terhapus</strong>.</p>
+        <div class="form-group">
+          <label class="form-label" style="color:var(--danger)">Ketik <strong>HAPUS TOTAL DATA</strong> untuk konfirmasi:</label>
+          <input type="text" id="reset-confirm" class="form-control" placeholder="HAPUS TOTAL DATA" style="font-family:monospace;letter-spacing:2px;font-weight:700" oninput="checkResetInput()">
+        </div>
+        <button class="btn btn-danger" id="reset-btn" onclick="doReset()" disabled>🗑️ Hapus Semua Data Transaksi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+initPage('pengaturan','Pengaturan','Konfigurasi struk, akun, dan data');
+const user = Auth.getUser();
+if (user?.role !== 'admin') {
+  document.getElementById('dummy-zone').style.display='none';
+  document.getElementById('danger-zone').style.display='none';
+}
+
+async function changePassword() {
+  const old_password = document.getElementById('old-pw').value;
+  const new_password = document.getElementById('new-pw').value;
+  const confirm = document.getElementById('confirm-pw').value;
+  if (!old_password || !new_password) { showToast('Semua field wajib diisi','warning'); return; }
+  if (new_password !== confirm) { showToast('Konfirmasi password tidak cocok','warning'); return; }
+  if (new_password.length < 6) { showToast('Password minimal 6 karakter','warning'); return; }
+  try {
+    await API.put('/auth/change-password', { old_password, new_password });
+    showToast('Password berhasil diubah','success');
+    ['old-pw','new-pw','confirm-pw'].forEach(id=>document.getElementById(id).value='');
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+function checkResetInput() {
+  document.getElementById('reset-btn').disabled = document.getElementById('reset-confirm').value !== 'HAPUS TOTAL DATA';
+}
+
+async function generateDummy() {
+  const btn=document.getElementById('gen-btn'), res=document.getElementById('gen-result');
+  btn.disabled=true; btn.textContent='⏳ Generating...'; res.textContent='';
+  try {
+    const r=await API.post('/admin/generate-dummy',{});
+    res.textContent='✅ '+r.message; res.style.color='var(--success)';
+  } catch(e) { res.textContent='❌ '+e.message; res.style.color='var(--danger)'; }
+  btn.textContent='🎲 Generate 30 Hari Data Dummy'; btn.disabled=false;
+}
+
+async function doReset() {
+  if (document.getElementById('reset-confirm').value !== 'HAPUS TOTAL DATA') return;
+  confirmDialog('<strong>YAKIN HAPUS SEMUA DATA TRANSAKSI?</strong><br><br>Tidak bisa dibatalkan!', async () => {
+    try {
+      const r=await API.post('/admin/reset-data',{confirmation:'HAPUS TOTAL DATA'});
+      showToast('✅ '+r.message,'success',6000);
+      document.getElementById('reset-confirm').value='';
+      document.getElementById('reset-btn').disabled=true;
+    } catch(e){showToast(e.message,'error');}
+  },'⚠️ Konfirmasi Hapus');
+}
+</script>
+</body>
+</html>

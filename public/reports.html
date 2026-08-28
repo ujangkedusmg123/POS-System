@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laporan Keuangan — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">📈 Laporan Keuangan</div><div class="page-subtitle">Laba rugi, penjualan, dan analisis bisnis</div></div>
+    <div class="top-bar-actions">
+      <input type="date" id="rep-start" class="form-control" style="width:135px">
+      <input type="date" id="rep-end" class="form-control" style="width:135px">
+      <button class="btn btn-primary" onclick="loadReports()">📊 Tampilkan</button>
+      <button class="btn btn-secondary" onclick="exportExcel(this)">📗 Excel</button>
+      <button class="btn btn-secondary" onclick="downloadReportA4()">⬇️ Unduh (A4)</button>
+      <button class="btn btn-secondary" onclick="printReportA4()">🖨️ Cetak A4 / PDF</button>
+    </div>
+  </div>
+  <div class="page-content">
+    <!-- Tabs -->
+    <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
+      <button class="btn btn-primary"   id="tab-pl"    onclick="switchTab('pl')">📋 Laba Rugi</button>
+      <button class="btn btn-secondary" id="tab-sales" onclick="switchTab('sales')">💰 Penjualan</button>
+      <button class="btn btn-secondary" id="tab-stock" onclick="switchTab('stock')">📦 Stok</button>
+      <button class="btn btn-secondary" id="tab-exp"   onclick="switchTab('exp')">📋 Beban</button>
+    </div>
+
+    <!-- === LABA RUGI TAB === -->
+    <div id="tab-pl-content">
+      <div class="grid-4 mb-4" id="pl-kpi"></div>
+      <div class="grid-2 mb-4">
+        <div class="card">
+          <div class="card-header"><span class="card-title">📋 Laporan Laba Rugi</span><span id="pl-period" style="font-size:12px;color:var(--text-muted)"></span></div>
+          <div class="card-body" id="pl-table"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">📈 Tren Penjualan vs Beban</span></div>
+          <div class="card-body"><div class="chart-container tall"><canvas id="plChart"></canvas></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- === PENJUALAN TAB === -->
+    <div id="tab-sales-content" style="display:none">
+      <div class="grid-4 mb-4" id="sales-kpi"></div>
+      <div class="grid-2 mb-4">
+        <div class="card">
+          <div class="card-header"><span class="card-title">📈 Tren Penjualan Harian</span></div>
+          <div class="card-body"><div class="chart-container"><canvas id="salesTrendChart"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">🏆 Produk Terlaris</span></div>
+          <div class="card-body"><div class="chart-container"><canvas id="topProdChart"></canvas></div></div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><span class="card-title">🏷️ Per Kategori</span></div>
+          <div class="card-body" id="cat-sales-table"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">👤 Per Kasir</span></div>
+          <div class="card-body" id="cashier-table"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- === STOK TAB === -->
+    <div id="tab-stock-content" style="display:none">
+      <div class="grid-3 mb-4" id="stock-kpi"></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">🦐 Stok Produk per Cabang</span></div>
+        <div class="table-wrapper">
+          <table class="table">
+            <thead><tr><th>Cabang</th><th>Stok Tersedia</th><th>Status</th></tr></thead>
+            <tbody id="stock-report-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- === BEBAN TAB === -->
+    <div id="tab-exp-content" style="display:none">
+      <div class="grid-4 mb-4" id="exp-kpi"></div>
+      <div class="grid-2 mb-4">
+        <div class="card">
+          <div class="card-header"><span class="card-title">🥧 Distribusi Beban</span></div>
+          <div class="card-body"><div class="chart-container"><canvas id="expCatChart"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">📊 Rincian per Kategori</span></div>
+          <div class="card-body" id="exp-detail-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+// Redirect cashier away from admin page
+// Gerbang halaman ditangani initPage() berdasarkan hak akses. Pemeriksaan
+// "harus admin" yang lama dihapus karena menendang keluar peran sah lain
+// (supervisor, tim produksi, runner) yang justru diberi izin untuk halaman ini.
+initPage('reports','Laporan Keuangan','Laba rugi, penjualan, dan analisis bisnis');
+
+document.getElementById('rep-start').value = getMonthStart();
+document.getElementById('rep-end').value = getToday();
+
+let plChart, salesChart2, topProdChart, expCatChart;
+
+let lastReport = null;
+
+async function loadReports() {
+  const start = document.getElementById('rep-start').value;
+  const end   = document.getElementById('rep-end').value;
+  try {
+    const [plData, salesData, stockData, expData] = await Promise.all([
+      API.get(`/reports/profit-loss?start_date=${start}&end_date=${end}`),
+      API.get(`/reports/sales?start_date=${start}&end_date=${end}`),
+      API.get('/reports/stock'),
+      API.get(`/reports/expenses?start_date=${start}&end_date=${end}`),
+    ]);
+    lastReport = { pl: plData, sales: salesData, stock: stockData, exp: expData, start, end };
+    renderPL(plData);
+    renderSales(salesData);
+    renderStock(stockData);
+    renderExpenses(expData);
+    showToast('Laporan berhasil dimuat','success');
+  } catch(e) { showToast('Gagal memuat laporan: '+e.message,'error'); }
+}
+
+// ======================== LABA RUGI ========================
+function renderPL(data) {
+  if (!data) return;
+  const rev      = data.revenue?.total || 0;
+  const hpp      = data.hpp || 0;
+  const labaKotor = data.laba_kotor || (rev - hpp);
+  const beban    = data.beban || 0;
+  const labaBersih = data.laba_bersih || (labaKotor - beban);
+  const trx      = data.revenue?.transactions || 0;
+
+  document.getElementById('pl-period').textContent =
+    `${fmt.date(data.period?.start)} — ${fmt.date(data.period?.end)}`;
+
+  document.getElementById('pl-kpi').innerHTML = `
+    <div class="kpi-card primary"><div class="kpi-icon">💰</div><div class="kpi-label">Pendapatan</div><div class="kpi-value large">${fmt.currency(rev)}</div><div class="kpi-change">${trx} transaksi</div></div>
+    <div class="kpi-card warning"><div class="kpi-icon">🏭</div><div class="kpi-label">HPP (Bahan+Kemasan)</div><div class="kpi-value large">${fmt.currency(hpp)}</div><div class="kpi-change">Biaya produksi</div></div>
+    <div class="kpi-card ${labaKotor>=0?'success':'danger'}"><div class="kpi-icon">📈</div><div class="kpi-label">Laba Kotor</div><div class="kpi-value large">${fmt.currency(labaKotor)}</div><div class="kpi-change ${labaKotor>=0?'up':'down'}">Margin: ${rev>0?(labaKotor/rev*100).toFixed(1):0}%</div></div>
+    <div class="kpi-card ${labaBersih>=0?'success':'danger'}"><div class="kpi-icon">🎯</div><div class="kpi-label">Laba Bersih</div><div class="kpi-value large">${fmt.currency(labaBersih)}</div><div class="kpi-change ${labaBersih>=0?'up':'down'}">Net margin: ${rev>0?(labaBersih/rev*100).toFixed(1):0}%</div></div>
+  `;
+
+  // P&L Statement Table
+  const cats = data.expenses?.by_category || [];
+  const hpp_cats   = cats.filter(c => c.is_hpp);
+  const beban_cats = cats.filter(c => !c.is_hpp && c.total > 0);
+
+  document.getElementById('pl-table').innerHTML = `
+    <div class="table-wrapper"><table style="width:100%;font-size:13px;border-collapse:collapse;min-width:320px">
+      <tr style="font-weight:700;font-size:14px;border-bottom:2px solid var(--border);padding:8px 0"><td style="padding:8px 4px">PENDAPATAN</td><td class="text-right font-mono" style="padding:8px 4px">${fmt.currency(rev)}</td></tr>
+      <tr><td style="padding:5px 4px 5px 16px;color:var(--text-secondary)">Penjualan (${trx} transaksi)</td><td class="text-right font-mono" style="color:var(--text-secondary)">${fmt.currency(rev)}</td></tr>
+
+      <tr style="height:8px"></tr>
+      <tr style="font-weight:700;font-size:13px;border-bottom:1px solid var(--border)"><td style="padding:6px 4px">HARGA POKOK PRODUKSI (HPP)</td><td class="text-right font-mono text-warning">(${fmt.currency(hpp)})</td></tr>
+      ${hpp_cats.map(c=>`<tr><td style="padding:4px 4px 4px 16px;color:var(--text-secondary)">${c.category}</td><td class="text-right font-mono" style="color:var(--text-secondary)">(${fmt.currency(c.total)})</td></tr>`).join('')}
+      ${hpp_cats.length===0?`<tr><td style="padding:4px 4px 4px 16px;color:var(--text-muted)">Belum ada data</td><td></td></tr>`:''}
+
+      <tr style="height:6px"></tr>
+      <tr style="font-weight:800;font-size:14px;background:var(--bg-light);border-top:2px solid var(--border)"><td style="padding:8px 4px">LABA KOTOR</td><td class="text-right font-mono ${labaKotor>=0?'text-success':'text-danger'}" style="font-size:15px">${fmt.currency(labaKotor)}</td></tr>
+
+      <tr style="height:8px"></tr>
+      <tr style="font-weight:700;font-size:13px;border-bottom:1px solid var(--border)"><td style="padding:6px 4px">BEBAN OPERASIONAL</td><td class="text-right font-mono text-danger">(${fmt.currency(beban)})</td></tr>
+      ${beban_cats.map(c=>`<tr><td style="padding:4px 4px 4px 16px;color:var(--text-secondary)">${c.category}</td><td class="text-right font-mono" style="color:var(--text-secondary)">(${fmt.currency(c.total)})</td></tr>`).join('')}
+      ${beban_cats.length===0?`<tr><td style="padding:4px 4px 4px 16px;color:var(--text-muted)">Belum ada beban operasional</td><td></td></tr>`:''}
+
+      <tr style="height:6px"></tr>
+      <tr style="font-weight:800;font-size:16px;background:var(--bg-light);border-top:2px solid var(--border);border-bottom:3px solid var(--border)">
+        <td style="padding:10px 4px">LABA BERSIH</td>
+        <td class="text-right font-mono ${labaBersih>=0?'text-success':'text-danger'}" style="font-size:17px;padding:10px 4px">${fmt.currency(labaBersih)}</td>
+      </tr>
+    </table></div>
+  `;
+
+  // Chart tren
+  const dailySales = {}, dailyExp = {};
+  (data.daily?.sales||[]).forEach(d => dailySales[d.date] = d.revenue);
+  (data.daily?.expenses||[]).forEach(d => dailyExp[d.date] = d.expenses);
+  const dates = [...new Set([...Object.keys(dailySales), ...Object.keys(dailyExp)])].sort();
+
+  if (plChart) plChart.destroy();
+  plChart = new Chart(document.getElementById('plChart'), {
+    type: 'line',
+    data: { labels: dates.map(d=>fmt.date(d)), datasets: [
+      { label:'Pendapatan', data:dates.map(d=>dailySales[d]||0), borderColor:'#1e6fe8', backgroundColor:'rgba(30,111,232,0.1)', tension:0.4, fill:true },
+      { label:'Beban', data:dates.map(d=>dailyExp[d]||0), borderColor:'#dc2626', backgroundColor:'rgba(220,38,38,0.05)', tension:0.4, borderDash:[5,5] },
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ tooltip:{ callbacks:{ label:ctx=>`${ctx.dataset.label}: ${fmt.currency(ctx.raw)}` }}}, scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>'Rp '+(v/1000).toFixed(0)+'k' }}}}
+  });
+}
+
+// ======================== PENJUALAN ========================
+function renderSales(data) {
+  if (!data) return;
+  const totalRev = (data.summary||[]).reduce((s,d)=>s+(d.revenue||0),0);
+  const totalTrx = (data.summary||[]).reduce((s,d)=>s+(d.transactions||0),0);
+  const maxRev   = (data.summary||[]).length ? Math.max(...data.summary.map(d=>d.revenue)) : 1;
+
+  document.getElementById('sales-kpi').innerHTML = `
+    <div class="kpi-card primary"><div class="kpi-label">Total Transaksi</div><div class="kpi-value">${fmt.number(totalTrx)}</div></div>
+    <div class="kpi-card success"><div class="kpi-label">Total Pendapatan</div><div class="kpi-value large">${fmt.currency(totalRev)}</div></div>
+    <div class="kpi-card secondary"><div class="kpi-label">Rata-rata Transaksi</div><div class="kpi-value large">${fmt.currency(totalTrx>0?totalRev/totalTrx:0)}</div></div>
+    <div class="kpi-card warning"><div class="kpi-label">Hari Terbaik</div><div class="kpi-value large">${fmt.currency(maxRev)}</div></div>
+  `;
+
+  if (salesChart2) salesChart2.destroy();
+  salesChart2 = new Chart(document.getElementById('salesTrendChart'),{
+    type:'bar',
+    data:{ labels:(data.summary||[]).map(d=>fmt.date(d.period)), datasets:[{ label:'Pendapatan', data:(data.summary||[]).map(d=>d.revenue), backgroundColor:'rgba(30,111,232,0.8)', borderRadius:4 }]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:ctx=>fmt.currency(ctx.raw) }}}, scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>'Rp '+(v/1000).toFixed(0)+'k' }}}}
+  });
+
+  const top5 = (data.by_product||[]).slice(0,5);
+  if (topProdChart) topProdChart.destroy();
+  if (top5.length > 0) {
+    topProdChart = new Chart(document.getElementById('topProdChart'),{
+      type:'bar',
+      data:{ labels:top5.map(p=>p.name.length>15?p.name.substring(0,15)+'...':p.name), datasets:[{ label:'Qty Terjual', data:top5.map(p=>p.qty), backgroundColor:['#1e6fe8','#0ea5a0','#d97706','#16a34a','#7c3aed'], borderRadius:4 }]},
+      options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y', plugins:{ legend:{display:false} }, scales:{ x:{ beginAtZero:true }}}
+    });
+  }
+
+  const tableStyle = 'width:100%;font-size:13px';
+  const thStyle = 'font-size:11px;text-transform:uppercase;color:var(--text-muted);padding:6px 0;border-bottom:1px solid var(--border)';
+
+  document.getElementById('cat-sales-table').innerHTML = `
+    <div class="table-wrapper"><table style="${tableStyle};min-width:300px">
+      <thead><tr><th style="${thStyle}">Kategori</th><th style="${thStyle}" class="text-right">Qty</th><th style="${thStyle}" class="text-right">Revenue</th></tr></thead>
+      <tbody>${(data.by_category||[]).map(c=>`<tr style="border-top:1px solid var(--border)">
+        <td style="padding:6px 0">${c.category}</td>
+        <td class="text-right font-mono">${fmt.number(c.qty)}</td>
+        <td class="text-right font-mono fw-bold">${fmt.currency(c.revenue)}</td>
+      </tr>`).join('')||'<tr><td colspan="3" class="text-center text-muted" style="padding:20px">Belum ada data</td></tr>'}</tbody>
+    </table></div>`;
+
+  document.getElementById('cashier-table').innerHTML = `
+    <div class="table-wrapper"><table style="${tableStyle};min-width:300px">
+      <thead><tr><th style="${thStyle}">Kasir</th><th style="${thStyle}" class="text-right">Trx</th><th style="${thStyle}" class="text-right">Revenue</th></tr></thead>
+      <tbody>${(data.by_cashier||[]).map(c=>`<tr style="border-top:1px solid var(--border)">
+        <td style="padding:6px 0">${c.full_name}</td>
+        <td class="text-right">${c.transactions}</td>
+        <td class="text-right font-mono fw-bold">${fmt.currency(c.revenue)}</td>
+      </tr>`).join('')||'<tr><td colspan="3" class="text-center text-muted" style="padding:20px">Belum ada data</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+// ======================== STOK ========================
+function renderStock(data) {
+  if (!data) return;
+  const stocks = data.mochi_stocks||[];
+  const total = data.total_stock||0;
+  const prods = data.products||[];
+
+  document.getElementById('stock-kpi').innerHTML = `
+    <div class="kpi-card primary"><div class="kpi-icon">🦐</div><div class="kpi-label">Total Stok Produk</div><div class="kpi-value">${total}</div><div class="kpi-change">Semua cabang</div></div>
+    <div class="kpi-card success"><div class="kpi-icon">📦</div><div class="kpi-label">Total Produk</div><div class="kpi-value">${data.summary?.total_products||prods.length}</div></div>
+    <div class="kpi-card ${stocks.some(s=>s.current_stock<=0)?'danger':stocks.some(s=>s.current_stock<10)?'warning':'secondary'}">
+      <div class="kpi-icon">📊</div><div class="kpi-label">Status</div>
+      <div class="kpi-value" style="font-size:16px">${stocks.some(s=>s.current_stock<=0)?'Ada yg HABIS':stocks.some(s=>s.current_stock<10)?'Ada yg MENIPIS':'AMAN'}</div>
+    </div>
+  `;
+
+  document.getElementById('stock-report-tbody').innerHTML = stocks.map(s=>`<tr>
+    <td style="font-weight:700">🏪 ${s.branch_name}</td>
+    <td class="${s.current_stock<=0?'text-danger':s.current_stock<10?'text-warning':'text-success'} fw-bold" style="font-size:20px">${s.current_stock} porsi</td>
+    <td><span class="badge ${s.current_stock<=0?'badge-danger':s.current_stock<10?'badge-warning':'badge-success'}">${s.current_stock<=0?'HABIS':s.current_stock<10?'MENIPIS':'AMAN'}</span></td>
+  </tr>`).join('') || '<tr><td colspan="3" class="text-center text-muted" style="padding:20px">Belum ada data</td></tr>';
+}
+
+// ======================== BEBAN ========================
+function renderExpenses(data) {
+  if (!data) return;
+  const cats   = data.by_category||[];
+  const total  = data.total||0;
+  const hppCats   = cats.filter(c=>c.is_hpp&&c.total>0);
+  const bebanCats = cats.filter(c=>!c.is_hpp&&c.total>0);
+  const hppTotal  = hppCats.reduce((s,c)=>s+c.total,0);
+  const bebanTotal= bebanCats.reduce((s,c)=>s+c.total,0);
+
+  document.getElementById('exp-kpi').innerHTML = `
+    <div class="kpi-card danger"><div class="kpi-label">Total Pengeluaran</div><div class="kpi-value large">${fmt.currency(total)}</div><div class="kpi-change">${(data.detail||[]).length} transaksi</div></div>
+    <div class="kpi-card warning"><div class="kpi-label">HPP (Bahan+Kemasan)</div><div class="kpi-value large">${fmt.currency(hppTotal)}</div></div>
+    <div class="kpi-card secondary"><div class="kpi-label">Beban Operasional</div><div class="kpi-value large">${fmt.currency(bebanTotal)}</div></div>
+    <div class="kpi-card primary"><div class="kpi-label">Rata-rata / Transaksi</div><div class="kpi-value large">${fmt.currency((data.detail||[]).length>0?total/(data.detail||[]).length:0)}</div></div>
+  `;
+
+  const allActive = cats.filter(c=>c.total>0);
+  if (expCatChart) expCatChart.destroy();
+  if (allActive.length > 0) {
+    const colors=['#dc2626','#d97706','#1e6fe8','#0ea5a0','#16a34a','#7c3aed','#db2777','#ea580c'];
+    expCatChart = new Chart(document.getElementById('expCatChart'),{
+      type:'pie',
+      data:{ labels:allActive.map(c=>c.category), datasets:[{ data:allActive.map(c=>c.total), backgroundColor:colors.slice(0,allActive.length), borderWidth:0, hoverOffset:8 }]},
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{position:'right'}, tooltip:{ callbacks:{ label:ctx=>`${ctx.label}: ${fmt.currency(ctx.raw)}`}}}}
+    });
+  }
+
+  const buildList = (items) => items.map(c=>{
+    const pct = total>0?(c.total/total*100).toFixed(1):0;
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+        <span style="font-size:13px;font-weight:600">${c.is_hpp?'[HPP] ':''}${c.category}</span>
+        <span class="font-mono" style="font-size:13px">${fmt.currency(c.total)} <span style="color:var(--text-muted)">${pct}%</span></span>
+      </div>
+      <div class="stock-bar"><div class="stock-bar-fill" style="width:${pct}%;background:${c.is_hpp?'var(--warning)':'var(--danger)'}"></div></div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('exp-detail-list').innerHTML =
+    (allActive.length > 0 ? buildList(allActive) : '<div class="empty-state"><p>Belum ada beban</p></div>');
+}
+
+// ======================== TAB SWITCH ========================
+function switchTab(tab) {
+  ['pl','sales','stock','exp'].forEach(t=>{
+    document.getElementById('tab-'+t+'-content').style.display = t===tab?'':'none';
+    document.getElementById('tab-'+t).className = t===tab?'btn btn-primary':'btn btn-secondary';
+  });
+}
+
+// Init
+loadReports();
+
+/* ==================== CETAK LAPORAN SEBAGAI DOKUMEN A4 ====================
+   Sebelumnya tombol Cetak memanggil window.print() mentah, sehingga yang
+   tercetak adalah SELURUH halaman aplikasi — sidebar, tombol, dan tab ikut
+   terbawa. Sekarang dibangun dokumen A4 khusus berisi datanya saja. */
+function buildReportDoc() {
+  if (!lastReport) return null;
+  const d = lastReport.pl || {};
+  const rp = (n) => fmt.currency(n);
+  const rev = d.revenue?.total || 0;
+  const hpp = d.hpp || 0;
+  const labaKotor = d.laba_kotor || (rev - hpp);
+  const beban = d.beban || 0;
+  const labaBersih = d.laba_bersih || (labaKotor - beban);
+  const cats = d.expenses?.by_category || [];
+  const hppCats = cats.filter(c => c.is_hpp);
+  const bebanCats = cats.filter(c => !c.is_hpp && c.total > 0);
+  const row = (label, val, cls) => `<tr class="${cls||''}"><td>${label}</td><td class="num">${val}</td></tr>`;
+  const sub = (label, val) => row('<b>'+label+'</b>', '<b>'+val+'</b>', 'sub');
+
+  const pl = `<table>
+    <thead><tr><th>Uraian</th><th class="num">Jumlah</th></tr></thead>
+    <tbody>
+      ${sub('PENDAPATAN', rp(rev))}
+      ${row('&nbsp;&nbsp;Penjualan (' + (d.revenue?.transactions || 0) + ' transaksi)', rp(rev))}
+      ${sub('HARGA POKOK PRODUKSI', '(' + rp(hpp) + ')')}
+      ${hppCats.map(c => row('&nbsp;&nbsp;' + escHtml(c.category), '(' + rp(c.total) + ')')).join('') || row('&nbsp;&nbsp;Belum ada data', '-')}
+      ${row('<b>LABA KOTOR</b>', '<b>' + rp(labaKotor) + '</b>', 'sub')}
+      ${sub('BEBAN OPERASIONAL', '(' + rp(beban) + ')')}
+      ${bebanCats.map(c => row('&nbsp;&nbsp;' + escHtml(c.category), '(' + rp(c.total) + ')')).join('') || row('&nbsp;&nbsp;Belum ada data', '-')}
+      <tr class="total"><td>LABA BERSIH</td><td class="num">${rp(labaBersih)}</td></tr>
+    </tbody></table>`;
+
+  const sd = lastReport.sales || {};
+  const byCat = (sd.by_category || []);
+  const byCashier = (sd.by_cashier || []);
+  const catTbl = byCat.length ? `<table>
+    <thead><tr><th>Kategori</th><th class="num">Qty</th><th class="num">Pendapatan</th></tr></thead>
+    <tbody>${byCat.map(c => `<tr><td>${escHtml(c.category)}</td><td class="num">${fmt.number(c.qty)}</td><td class="num">${rp(c.revenue)}</td></tr>`).join('')}</tbody>
+    </table>` : '<p class="note">Belum ada data.</p>';
+  const cashTbl = byCashier.length ? `<table>
+    <thead><tr><th>Kasir</th><th class="num">Trx</th><th class="num">Pendapatan</th></tr></thead>
+    <tbody>${byCashier.map(c => `<tr><td>${escHtml(c.full_name)}</td><td class="num">${c.transactions}</td><td class="num">${rp(c.revenue)}</td></tr>`).join('')}</tbody>
+    </table>` : '<p class="note">Belum ada data.</p>';
+
+  const body = `
+    <h3 class="sec">Laporan Laba Rugi</h3>
+    ${pl}
+    <div class="cols">
+      <div><h3 class="sec">Penjualan per Kategori</h3>${catTbl}</div>
+      <div><h3 class="sec">Penjualan per Kasir</h3>${cashTbl}</div>
+    </div>
+    <div class="sign-row">
+      <div class="sign"><div>Disusun oleh</div><div class="line">&nbsp;</div></div>
+      <div class="sign"><div>Disetujui oleh</div><div class="line">&nbsp;</div></div>
+    </div>`;
+
+  return {
+    title: 'Laporan Keuangan',
+    subtitle: fmt.date(lastReport.start) + ' — ' + fmt.date(lastReport.end),
+    meta: [
+      ['Periode', fmt.date(lastReport.start) + ' s/d ' + fmt.date(lastReport.end)],
+      ['Total Transaksi', String(d.revenue?.transactions || 0)],
+      ['Pendapatan', rp(rev)],
+      ['Laba Bersih', rp(labaBersih)],
+    ],
+    body,
+  };
+}
+
+function printReportA4() {
+  const doc = buildReportDoc();
+  if (!doc) return showToast('Tampilkan laporannya dulu','warning');
+  printA4Document(doc);
+}
+function downloadReportA4() {
+  const doc = buildReportDoc();
+  if (!doc) return showToast('Tampilkan laporannya dulu','warning');
+  downloadA4Document(doc, 'laporan-keuangan-' + lastReport.start + '_' + lastReport.end + '.html');
+}
+
+
+
+/* Ekspor laporan keuangan: satu berkas Excel berisi empat lembar
+   (Laba Rugi, Penjualan, Stok, Beban) sesuai periode yang sedang tampil. */
+function exportExcel(btn) {
+  if (!lastReport) return showToast('Muat laporan dulu sebelum diekspor','warning');
+  const { pl, sales, stock, exp, start, end } = lastReport;
+  const periode = [['Periode', fmt.date(start) + ' s/d ' + fmt.date(end)]];
+
+  const rev = pl.revenue?.total || 0;
+  const hpp = pl.hpp || 0;
+  const labaKotor = pl.laba_kotor ?? (rev - hpp);
+  const beban = pl.beban || 0;
+  const labaBersih = pl.laba_bersih ?? (labaKotor - beban);
+  const kategori = pl.expenses?.by_category || [];
+
+  const barisPL = [
+    { pos:'PENDAPATAN', ket:'Total penjualan (' + (pl.revenue?.transactions||0) + ' transaksi)', nilai:rev },
+  ];
+  kategori.filter(c => c.is_hpp && c.total > 0).forEach(c => barisPL.push({ pos:'  HPP', ket:c.category, nilai:-c.total }));
+  barisPL.push({ pos:'LABA KOTOR', ket:'Pendapatan - HPP', nilai:labaKotor });
+  kategori.filter(c => !c.is_hpp && c.total > 0).forEach(c => barisPL.push({ pos:'  Beban Operasional', ket:c.category, nilai:-c.total }));
+  barisPL.push({ pos:'LABA BERSIH', ket:'Laba Kotor - Beban Operasional', nilai:labaBersih });
+
+  const sheets = [
+    { name:'Laba Rugi', title:'Laporan Laba Rugi \u2014 Ujang Kedu', meta: excelMeta(periode),
+      columns:[{header:'Pos',key:'pos',width:26},{header:'Keterangan',key:'ket',width:40},{header:'Nilai (Rp)',key:'nilai',type:'money'}],
+      rows: barisPL },
+    { name:'Penjualan Harian', title:'Penjualan per Hari', meta: excelMeta(periode),
+      columns:[{header:'Tanggal',key:'tgl',type:'date'},{header:'Transaksi',key:'trx',type:'number'},{header:'Omzet (Rp)',key:'omzet',type:'money'},{header:'Rata-rata / Transaksi (Rp)',key:'rata',type:'money'}],
+      rows: (sales.summary||[]).map(d => ({ tgl:d.period, trx:d.transactions||0, omzet:d.revenue||0, rata:Math.round(d.avg_transaction||0) })),
+      totals: { tgl:'TOTAL', trx:(sales.summary||[]).reduce((a,d)=>a+(d.transactions||0),0), omzet:(sales.summary||[]).reduce((a,d)=>a+(d.revenue||0),0) } },
+    { name:'Per Produk', title:'Penjualan per Produk', meta: excelMeta(periode),
+      columns:[{header:'Produk',key:'nama',width:30},{header:'Terjual',key:'qty',type:'number'},{header:'Omzet (Rp)',key:'omzet',type:'money'}],
+      rows: (sales.by_product||[]).map(p => ({ nama:p.product_name||p.name, qty:p.quantity||p.qty||0, omzet:p.revenue||0 })),
+      totals: { nama:'TOTAL', qty:(sales.by_product||[]).reduce((a,p)=>a+(p.quantity||p.qty||0),0), omzet:(sales.by_product||[]).reduce((a,p)=>a+(p.revenue||0),0) } },
+    { name:'Stok per Cabang', title:'Posisi Stok per Cabang', meta: excelMeta(),
+      columns:[{header:'Cabang',key:'cabang',width:26},{header:'Total Stok (pcs)',key:'stok',type:'number'}],
+      rows: (stock.stocks||stock.mochi_stocks||[]).map(b => ({ cabang:b.branch_name||'-', stok:b.current_stock||0 })),
+      totals: { cabang:'TOTAL', stok: stock.total_stock || (stock.stocks||[]).reduce((a,b)=>a+(b.current_stock||0),0) } },
+    { name:'Beban', title:'Beban per Kategori', meta: excelMeta(periode),
+      columns:[{header:'Kategori',key:'nama',width:28},{header:'Jenis',key:'jenis'},{header:'Jumlah Transaksi',key:'jumlah_trx',type:'number'},{header:'Jumlah (Rp)',key:'total',type:'money'}],
+      rows: (exp.by_category||[]).filter(c=>c.total>0).map(c => ({ nama:c.category, jenis:c.is_hpp?'HPP':'Beban Operasional', jumlah_trx:c.count||0, total:c.total })),
+      totals: { nama:'TOTAL', total:(exp.by_category||[]).reduce((a,c)=>a+(c.total||0),0) } },
+  ];
+  if ((exp.detail||[]).length) {
+    sheets.push({ name:'Rincian Beban', title:'Rincian Beban & Pengeluaran', meta: excelMeta(periode),
+      columns:[{header:'Tanggal',key:'tgl',type:'date'},{header:'Kategori',key:'kategori'},{header:'Cabang',key:'cabang'},
+               {header:'Keterangan',key:'ket',width:40},{header:'Jumlah (Rp)',key:'jumlah',type:'money'}],
+      rows: exp.detail.map(e => ({ tgl:e.expense_date, kategori:e.category_name||e.category||'-', cabang:e.branch_name||'Semua cabang',
+        ket:e.description||'-', jumlah:e.amount||0 })),
+      totals: { tgl:'TOTAL', jumlah: exp.detail.reduce((a,e)=>a+(e.amount||0),0) } });
+  }
+  downloadExcel({ filename:'laporan-keuangan-' + start + '_' + end, sheets }, btn);
+}
+</script>
+</body>
+</html>

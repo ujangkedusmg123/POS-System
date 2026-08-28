@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Riwayat Penjualan — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">💰 Riwayat Penjualan</div><div class="page-subtitle" id="result-label">Semua transaksi</div></div>
+    <div class="top-bar-actions"><button class="btn btn-secondary" onclick="exportExcel(this)">📗 Excel</button><a href="/pos.html" class="btn btn-primary">🛒 Buka Kasir</a></div>
+  </div>
+
+  <div class="page-content">
+    <!-- FILTER PANEL -->
+    <div class="card mb-4">
+      <div class="card-header"><span class="card-title">🔍 Filter Transaksi</span><button class="btn btn-secondary btn-sm" onclick="resetFilters()">Reset</button></div>
+      <div class="card-body" style="padding:12px 16px">
+        <!-- Row 1: Period -->
+        <div style="display:flex;gap:6px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:700;color:var(--text-muted);min-width:60px">PERIODE:</span>
+          <input type="date" id="f-start" class="form-control" style="width:130px">
+          <span style="color:var(--text-muted)">—</span>
+          <input type="date" id="f-end" class="form-control" style="width:130px">
+          <button class="btn btn-secondary btn-sm" onclick="setQuick('today')">Hari Ini</button>
+          <button class="btn btn-secondary btn-sm" onclick="setQuick('week')">7 Hari</button>
+          <button class="btn btn-secondary btn-sm" onclick="setQuick('month')">Bulan Ini</button>
+          <button class="btn btn-secondary btn-sm" onclick="setQuick('lastmonth')">Bulan Lalu</button>
+        </div>
+        <!-- Row 2: Other filters -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <span style="font-size:12px;font-weight:700;color:var(--text-muted);min-width:60px">FILTER:</span>
+          <select id="f-branch" class="form-control" style="width:160px"><option value="">Semua Cabang</option></select>
+          <select id="f-cashier" class="form-control" style="width:150px"><option value="">Semua Kasir</option></select>
+          <select id="f-channel" class="form-control" style="width:130px">
+            <option value="">Semua Channel</option>
+            <option value="langsung">Langsung</option>
+            <option value="gofood">GoFood</option>
+            <option value="grabfood">GrabFood</option>
+            <option value="shopeefood">ShopeeFood</option>
+          </select>
+          <select id="f-method" class="form-control" style="width:120px">
+            <option value="">Semua Metode</option>
+            <option value="cash">Cash</option>
+            <option value="transfer">Transfer</option>
+            <option value="qris">QRIS</option>
+          </select>
+          <div class="search-bar"><span class="search-icon">🔍</span><input type="text" id="f-product" class="form-control" placeholder="Nama produk..." style="width:150px"></div>
+          <button class="btn btn-primary" onclick="loadSales()">📊 Tampilkan</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI -->
+    <div class="grid-4 mb-4" id="sales-kpi"></div>
+
+    <!-- Channel + Payment breakdown -->
+    <div class="grid-2 mb-4">
+      <div class="card">
+        <div class="card-header"><span class="card-title">📊 Breakdown Channel</span></div>
+        <div class="card-body" id="channel-breakdown"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">💳 Breakdown Metode Bayar</span></div>
+        <div class="card-body" id="payment-breakdown"></div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Daftar Transaksi <span id="trx-count" style="font-size:12px;color:var(--text-muted)"></span></span>
+        <div class="search-bar"><span class="search-icon">🔍</span><input type="text" id="sale-search" class="form-control" placeholder="Cari invoice / produk..." style="width:200px" oninput="filterTable()"></div>
+      </div>
+      <div class="table-wrapper">
+        <table class="table sortable-table" id="sales-table">
+          <thead>
+            <tr>
+              <th data-sort="invoice">Invoice</th><th data-sort="date">Tanggal</th><th data-sort="branch">Cabang</th><th data-sort="channel">Channel</th>
+              <th data-sort="product">Produk</th><th data-sort="total" style="text-align:right">Total</th><th data-sort="method">Metode</th><th data-sort="cashier">Kasir</th><th data-nosort="true">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="sales-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="sale-detail-modal">
+  <div class="modal-box modal-lg">
+    <div class="modal-header">
+      <span class="modal-title" id="detail-invoice">Detail Transaksi</span>
+      <button class="modal-close" onclick="closeModal('sale-detail-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="sale-detail-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="cancel-btn" onclick="cancelSale()" style="margin-right:auto">❌ Batalkan</button>
+      <button class="btn btn-secondary" onclick="closeModal('sale-detail-modal')">Tutup</button>
+      <button class="btn btn-secondary" id="delete-btn" onclick="deleteSale()" style="color:var(--danger);border-color:var(--danger)">🗑️ Hapus</button>
+      <button class="btn btn-primary" onclick="doPrint()">🖨️ Cetak</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+initPage('sales','Riwayat Penjualan','');
+const user = Auth.getUser();
+const CH_LABEL = { langsung:'Langsung', gofood:'GoFood', grabfood:'GrabFood', shopeefood:'ShopeeFood' };
+const CH_COLOR = { langsung:'badge-primary', gofood:'badge-danger', grabfood:'badge-success', shopeefood:'badge-warning' };
+const PM_TEXT  = { cash:'Cash', transfer:'Transfer', qris:'QRIS' };
+
+let allSales = [], currentSale = null;
+
+// Init filters
+document.getElementById('f-start').value = getMonthStart();
+document.getElementById('f-end').value = getToday();
+
+async function initFilters() {
+  try {
+    const [branches, cashiers] = await Promise.all([
+      API.get('/branches'),
+      API.get('/sales/meta/cashiers'),
+    ]);
+    // Branch filter (admin only)
+    const fBranch = document.getElementById('f-branch');
+    if (user?.role === 'admin') {
+      branches.filter(b=>b.is_active).forEach(b=>{const o=document.createElement('option');o.value=b.id;o.textContent=b.name;fBranch.appendChild(o);});
+    } else {
+      fBranch.closest('select') && (fBranch.style.display='none');
+    }
+    // Cashier filter
+    const fCashier = document.getElementById('f-cashier');
+    cashiers.forEach(c=>{const o=document.createElement('option');o.value=c.id;o.textContent=c.full_name;fCashier.appendChild(o);});
+  } catch(e) {}
+}
+
+function setQuick(period) {
+  const today = getToday();
+  const start = document.getElementById('f-start');
+  const end = document.getElementById('f-end');
+  if (period==='today') { start.value=today; end.value=today; }
+  else if (period==='week') {
+    const d=new Date(); d.setDate(d.getDate()-6);
+    start.value=ymdWib(d); end.value=today;
+  } else if (period==='month') { start.value=getMonthStart(); end.value=today; }
+  else if (period==='lastmonth') {
+    const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-1);
+    const s=ymdWib(d);
+    const e=ymdWib(new Date(d.getFullYear(),d.getMonth()+1,0));
+    start.value=s; end.value=e;
+  }
+  loadSales();
+}
+
+function resetFilters() {
+  document.getElementById('f-start').value=getMonthStart();
+  document.getElementById('f-end').value=getToday();
+  document.getElementById('f-branch').value='';
+  document.getElementById('f-cashier').value='';
+  document.getElementById('f-channel').value='';
+  document.getElementById('f-method').value='';
+  document.getElementById('f-product').value='';
+  loadSales();
+}
+
+async function loadSales() {
+  const params = new URLSearchParams({
+    start_date: document.getElementById('f-start').value,
+    end_date:   document.getElementById('f-end').value,
+    channel:    document.getElementById('f-channel').value,
+    payment_method: document.getElementById('f-method').value,
+    branch_id:  document.getElementById('f-branch').value,
+    cashier_id: document.getElementById('f-cashier').value,
+    product_search: document.getElementById('f-product').value,
+    limit: 300,
+  });
+  // Remove empty params
+  for (const [k,v] of [...params.entries()]) if (!v) params.delete(k);
+
+  try {
+    const data = await API.get('/sales?'+params.toString());
+    allSales = data.sales||[];
+    renderKPI(allSales);
+    renderBreakdowns(allSales);
+    renderTable(allSales);
+    document.getElementById('result-label').textContent = `Menampilkan ${allSales.length} transaksi`;
+  } catch(e) { showToast('Gagal: '+e.message,'error'); }
+}
+
+function renderKPI(sales) {
+  const total = sales.reduce((s,x)=>s+x.total,0);
+  const avgTrx = sales.length>0 ? total/sales.length : 0;
+  const maxDay = {};
+  sales.forEach(s=>{ const d=s.created_at?.split('T')[0]||''; maxDay[d]=(maxDay[d]||0)+s.total; });
+  const bestDay = Object.values(maxDay).length ? Math.max(...Object.values(maxDay)) : 0;
+
+  document.getElementById('sales-kpi').innerHTML = `
+    <div class="kpi-card primary"><div class="kpi-icon">💰</div><div class="kpi-label">Total Penjualan</div><div class="kpi-value large">${fmt.currency(total)}</div><div class="kpi-change">${sales.length} transaksi</div></div>
+    <div class="kpi-card success"><div class="kpi-icon">📊</div><div class="kpi-label">Rata-rata / Transaksi</div><div class="kpi-value large">${fmt.currency(Math.round(avgTrx))}</div></div>
+    <div class="kpi-card warning"><div class="kpi-icon">🏆</div><div class="kpi-label">Hari Terbaik</div><div class="kpi-value large">${fmt.currency(bestDay)}</div></div>
+    <div class="kpi-card secondary"><div class="kpi-icon">📅</div><div class="kpi-label">Hari Aktif</div><div class="kpi-value">${Object.keys(maxDay).length} hari</div></div>
+  `;
+}
+
+function renderBreakdowns(sales) {
+  // Channel
+  const chs={};
+  sales.forEach(s=>{const ch=s.channel||'langsung';if(!chs[ch])chs[ch]={count:0,total:0};chs[ch].count++;chs[ch].total+=s.total;});
+  const chTotal=Object.values(chs).reduce((s,v)=>s+v.total,0);
+  document.getElementById('channel-breakdown').innerHTML = Object.entries(chs).sort((a,b)=>b[1].total-a[1].total).map(([ch,d])=>{
+    const pct=chTotal>0?(d.total/chTotal*100).toFixed(0):0;
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+        <span><span class="badge ${CH_COLOR[ch]||'badge-secondary'}" style="font-size:11px">${CH_LABEL[ch]||ch}</span> <span style="font-size:12px;color:var(--text-muted)">${d.count} trx</span></span>
+        <span class="font-mono" style="font-size:13px;font-weight:700">${fmt.currency(d.total)}</span>
+      </div>
+      <div style="background:var(--border);border-radius:4px;height:8px"><div style="width:${pct}%;height:8px;border-radius:4px;background:var(--primary)"></div></div>
+    </div>`;
+  }).join('') || '<div class="empty-state" style="padding:20px"><p>Belum ada data</p></div>';
+
+  // Payment
+  const pms={};
+  sales.forEach(s=>{const m=s.payment_method;if(!pms[m])pms[m]={count:0,total:0};pms[m].count++;pms[m].total+=s.total;});
+  const pmTotal=Object.values(pms).reduce((s,v)=>s+v.total,0);
+  const pmColors={cash:'var(--success)',transfer:'var(--primary)',qris:'var(--warning)'};
+  document.getElementById('payment-breakdown').innerHTML = Object.entries(pms).sort((a,b)=>b[1].total-a[1].total).map(([m,d])=>{
+    const pct=pmTotal>0?(d.total/pmTotal*100).toFixed(0):0;
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+        <span style="font-weight:700;font-size:13px">${PM_TEXT[m]||m} <span style="font-size:12px;color:var(--text-muted);font-weight:400">${d.count} trx · ${pct}%</span></span>
+        <span class="font-mono" style="font-size:13px;font-weight:700">${fmt.currency(d.total)}</span>
+      </div>
+      <div style="background:var(--border);border-radius:4px;height:8px"><div style="width:${pct}%;height:8px;border-radius:4px;background:${pmColors[m]||'var(--secondary)'}"></div></div>
+    </div>`;
+  }).join('') || '<div class="empty-state" style="padding:20px"><p>Belum ada data</p></div>';
+}
+
+function renderTable(sales) {
+  document.getElementById('trx-count').textContent = `(${sales.length} transaksi)`;
+  document.getElementById('sales-tbody').innerHTML = sales.map(s=>`<tr>
+    <td data-sort-value="${s.invoice_number}"><a onclick="showDetail(${s.id})" style="color:var(--primary);cursor:pointer;font-family:monospace;font-size:11px">${s.invoice_number}</a></td>
+    <td data-sort-value="${s.created_at}" style="font-size:12px;color:var(--text-muted);white-space:nowrap">${fmt.dateTime(s.created_at)}</td>
+    <td data-sort-value="${s.branch_name||''}" style="font-size:12px">${s.branch_name||'-'}</td>
+    <td data-sort-value="${s.channel||''}"><span class="badge ${CH_COLOR[s.channel]||'badge-secondary'}" style="font-size:11px">${CH_LABEL[s.channel]||s.channel||'Langsung'}</span></td>
+    <td data-sort-value="${(s.items_summary||'').toLowerCase()}" style="font-size:12px;color:var(--text-muted)">${s.items_summary||''}</td>
+    <td data-sort-value="${s.total||0}" class="currency fw-bold" style="text-align:right;white-space:nowrap">${fmt.currency(s.total)}</td>
+    <td data-sort-value="${s.payment_method||''}" style="font-weight:600;font-size:12px">${PM_TEXT[s.payment_method]||s.payment_method}</td>
+    <td data-sort-value="${s.cashier_name||''}" style="font-size:12px">${s.cashier_name||'-'}</td>
+    <td><button class="btn btn-sm btn-secondary" onclick="showDetail(${s.id})">Detail</button></td>
+  </tr>`).join('') || '<tr><td colspan="9" class="text-center text-muted" style="padding:30px">Tidak ada transaksi yang sesuai filter</td></tr>';
+  if (window.makeSortable) makeSortable(document.getElementById('sales-table'));
+}
+
+function filterTable() {
+  const q = document.getElementById('sale-search').value.toLowerCase();
+  const filtered = allSales.filter(s => !q || s.invoice_number.toLowerCase().includes(q) || (s.cashier_name||'').toLowerCase().includes(q) || (s.customer_name||'').toLowerCase().includes(q) || (s.items_summary||'').toLowerCase().includes(q));
+  renderTable(filtered);
+}
+
+async function showDetail(id) {
+  try {
+    const sale = await API.get('/sales/'+id);
+    currentSale = sale;
+    document.getElementById('detail-invoice').textContent = sale.invoice_number;
+    document.getElementById('cancel-btn').style.display = sale.status==='cancelled'?'none':'';
+    document.getElementById('delete-btn').style.display = user?.role==='admin'?'':'none';
+    document.getElementById('cancel-btn').dataset.id = id;
+
+    document.getElementById('sale-detail-body').innerHTML = `
+      <div class="grid-2 mb-3" style="gap:10px;font-size:13px">
+        <div><div class="form-label">No. Invoice</div><div class="font-mono fw-bold">${sale.invoice_number}</div></div>
+        <div><div class="form-label">Waktu</div><div>${fmt.dateTime(sale.created_at)}</div></div>
+        <div><div class="form-label">Channel</div><span class="badge ${CH_COLOR[sale.channel]||'badge-secondary'}">${CH_LABEL[sale.channel]||sale.channel||'Langsung'}</span></div>
+        <div><div class="form-label">Cabang</div><div>${sale.branch_name||'-'}</div></div>
+        <div><div class="form-label">Kasir</div><div>${sale.cashier_name||'-'}</div></div>
+        <div><div class="form-label">Status</div><span class="badge ${sale.status==='completed'?'badge-success':'badge-danger'}">${sale.status}</span></div>
+        ${sale.customer_name&&sale.customer_name!=='Pelanggan Umum'?`<div><div class="form-label">Pelanggan</div><div>${sale.customer_name}</div></div>`:''}
+      </div>
+      <div class="table-wrapper" style="margin-bottom:12px"><table class="table">
+        <thead><tr><th>Produk</th><th>Qty</th><th>Harga</th><th>Subtotal</th></tr></thead>
+        <tbody>${(sale.items||[]).map(i=>`<tr>
+          <td style="font-weight:600">${i.product_name}</td>
+          <td>${i.quantity}</td>
+          <td class="currency">${fmt.currency(i.sell_price)}</td>
+          <td class="currency fw-bold">${fmt.currency(i.subtotal)}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <div style="text-align:right;max-width:260px;margin-left:auto;display:grid;gap:5px;font-size:13px">
+        ${sale.discount_amount>0?`<div style="display:flex;justify-content:space-between"><span>Diskon</span><span class="font-mono text-danger">-${fmt.currency(sale.discount_amount)}</span></div>`:''}
+        <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:800;border-top:2px solid var(--border);padding-top:6px"><span>TOTAL</span><span class="font-mono">${fmt.currency(sale.total)}</span></div>
+        <div style="display:flex;justify-content:space-between;color:var(--text-muted)"><span>Bayar (${PM_TEXT[sale.payment_method]||sale.payment_method})</span><span class="font-mono">${fmt.currency(sale.payment_amount)}</span></div>
+        ${sale.change_amount>0?`<div style="display:flex;justify-content:space-between;color:var(--success)"><span>Kembalian</span><span class="font-mono">${fmt.currency(sale.change_amount)}</span></div>`:''}
+      </div>
+    `;
+    openModal('sale-detail-modal');
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function cancelSale() {
+  const id = document.getElementById('cancel-btn').dataset.id;
+  confirmDialog('Yakin ingin membatalkan transaksi ini?', async () => {
+    try { await API.patch('/sales/'+id+'/cancel',{reason:'Dibatalkan oleh '+user?.full_name}); showToast('Dibatalkan','success'); closeModal('sale-detail-modal'); loadSales(); }
+    catch(e) { showToast(e.message,'error'); }
+  }, 'Batalkan Transaksi');
+}
+
+async function deleteSale() {
+  if (!currentSale) return;
+  confirmDialog(`<strong>Hapus permanen</strong> faktur <code>${currentSale.invoice_number}</code>?`,
+    async () => {
+      try { await API.delete('/sales/'+currentSale.id); showToast('Faktur dihapus','success'); closeModal('sale-detail-modal'); loadSales(); }
+      catch(e) { showToast(e.message,'error'); }
+    }, 'Hapus Faktur');
+}
+
+/* Cetak ulang: utamakan printer Bluetooth, jatuh ke cetak biasa bila
+   Web Bluetooth tidak tersedia di perangkat ini. */
+function doPrint() {
+  if (!currentSale) return;
+  if (typeof BT_SUPPORTED !== 'undefined' && BT_SUPPORTED) printReceiptBluetooth(currentSale);
+  else printReceipt(currentSale);
+}
+function doPrintBT() { doPrint(); }
+if (typeof initPrintUI === 'function') setTimeout(initPrintUI, 300);
+
+function exportExcel(btn) {
+  if (!allSales || !allSales.length) return showToast('Belum ada data untuk diekspor','warning');
+  const start = document.getElementById('f-start')?.value || '';
+  const end = document.getElementById('f-end')?.value || '';
+  const cabang = document.getElementById('f-branch');
+  downloadExcel({
+    filename: 'riwayat-penjualan-' + getToday(),
+    sheets: [{
+      name: 'Riwayat Penjualan',
+      title: 'Riwayat Penjualan \u2014 Ujang Kedu',
+      meta: excelMeta([
+        ['Periode', (start||'awal') + ' s/d ' + (end||'sekarang')],
+        ['Cabang', cabang && cabang.selectedIndex >= 0 ? cabang.options[cabang.selectedIndex].text : 'Semua Cabang'],
+      ]),
+      columns: [
+        { header:'Invoice', key:'inv', width:22 },
+        { header:'Waktu', key:'waktu', type:'datetime' },
+        { header:'Cabang', key:'cabang' },
+        { header:'Channel', key:'channel' },
+        { header:'Item', key:'item', width:42 },
+        { header:'Metode Bayar', key:'metode' },
+        { header:'Kasir', key:'kasir' },
+        { header:'Pelanggan', key:'pelanggan' },
+        { header:'Total (Rp)', key:'total', type:'money' },
+      ],
+      rows: allSales.map(s => ({
+        inv:s.invoice_number, waktu:s.created_at, cabang:s.branch_name||'-', channel:s.channel||'-',
+        item:s.items_summary||'-', metode:s.payment_method||'-', kasir:s.cashier_name||'-',
+        pelanggan:s.customer_name||'Pelanggan Umum', total:s.total||0,
+      })),
+      totals: { inv:'TOTAL ' + allSales.length + ' transaksi', total: allSales.reduce((a,s)=>a+(s.total||0),0) },
+    }],
+  }, btn);
+}
+
+// Init
+initFilters().then(()=>loadSales());
+</script>
+</body>
+</html>

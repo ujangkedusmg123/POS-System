@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transfer Stok — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.tf-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.tf-tbl th { background:#f8fafc; padding:10px 14px; text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; border-bottom:1px solid #e5e7eb; font-weight:700; }
+.tf-tbl td { padding:11px 14px; border-bottom:1px solid #f1f5f9; }
+.item-adder { display:grid; grid-template-columns:1fr 110px auto; gap:6px; padding:10px; background:#f8fafc; border-radius:8px; }
+.tf-item-row { display:grid; grid-template-columns:1fr auto auto; gap:8px; align-items:center; padding:8px 12px; background:white; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:4px; }
+</style>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">↔️ Transfer Stok Antar Cabang</div><div class="page-subtitle">Pindahkan item stok dari Dapur Produksi ke Outlet, atau antar Outlet</div></div>
+    <div class="top-bar-actions">
+      <button class="btn btn-secondary" onclick="exportExcel(this)">📗 Excel</button>
+      <button class="btn btn-primary" onclick="openNewModal()">+ Transfer Baru</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="card">
+      <div class="card-header" style="flex-wrap:wrap;gap:10px">
+        <span class="card-title">📋 Riwayat Transfer</span>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input type="date" id="tf-start" class="form-control" style="width:140px">
+          <span style="color:#6b7280">—</span>
+          <input type="date" id="tf-end" class="form-control" style="width:140px">
+          <button class="btn btn-secondary btn-sm" onclick="setQuick('today')">Hari Ini</button>
+          <button class="btn btn-secondary btn-sm" onclick="setQuick('week')">7 Hari</button>
+          <button class="btn btn-secondary btn-sm" onclick="setQuick('month')">Bulan Ini</button>
+          <button class="btn btn-primary btn-sm" onclick="loadAll()">🔄 Terapkan</button>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table class="tf-tbl">
+          <thead>
+            <tr><th>Kode</th><th>Waktu</th><th>Dari</th><th>Ke</th><th style="text-align:right">Item</th><th style="text-align:right">Total Qty</th><th>Operator</th><th>Detail</th></tr>
+          </thead>
+          <tbody id="tf-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Transfer Baru -->
+<div class="modal-overlay" id="new-modal">
+  <div class="modal-box" style="max-width:700px">
+    <div class="modal-header"><span class="modal-title">↔️ Transfer Stok Baru</span><button class="modal-close" onclick="closeModal('new-modal')">✕</button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:end;margin-bottom:14px">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Dari Cabang *</label>
+          <select id="tf-from" class="form-control" onchange="onFromChange()"><option value="">-- Pilih cabang asal --</option></select>
+        </div>
+        <div style="padding:6px 0;color:#6b7280">→</div>
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label">Ke Cabang *</label>
+          <select id="tf-to" class="form-control"><option value="">-- Pilih cabang tujuan --</option></select>
+        </div>
+      </div>
+
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px">Item yang Ditransfer</div>
+      <div id="tf-items-list" style="margin-bottom:10px"></div>
+      <div class="item-adder">
+        <select id="tf-new-product" class="form-control" style="font-size:12px"><option value="">-- Pilih item stok --</option></select>
+        <input type="number" id="tf-new-qty" class="form-control" placeholder="Qty" min="1" value="1" style="font-size:12px;text-align:center;font-family:ui-monospace,monospace">
+        <button type="button" class="btn btn-primary btn-sm" onclick="addTfItem()">+ Tambah</button>
+      </div>
+      <div id="tf-stock-info" style="font-size:11px;color:#6b7280;margin-top:4px"></div>
+
+      <div class="form-group" style="margin-top:14px">
+        <label class="form-label">Catatan</label>
+        <input type="text" id="tf-notes" class="form-control" placeholder="Opsional (misal: kirim rutin harian)">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('new-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="saveTransfer()">✅ Kirim Transfer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Detail -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title" id="detail-title">Detail Transfer</span><button class="modal-close" onclick="closeModal('detail-modal')">✕</button></div>
+    <div class="modal-body" id="detail-body"></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('detail-modal')">Tutup</button></div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+initPage('transfer','Transfer Stok','Antar cabang');
+let branches = [], stockItems = [], currentItems = [], currentStocks = [], allTransfers = [];
+
+async function loadAll() {
+  try {
+    branches = await API.get('/branches');
+    stockItems = await API.get('/products/meta/stock-items');
+    const from = document.getElementById('tf-from');
+    const to = document.getElementById('tf-to');
+    [from,to].forEach(el=>{
+      const keep = el.querySelector('option[value=""]');
+      el.innerHTML = keep.outerHTML;
+      branches.filter(b=>b.is_active).forEach(b=>{
+        const opt = document.createElement('option');
+        opt.value = b.id;
+        opt.textContent = (b.is_production_center ? '🏭 ' : '🏪 ') + b.name;
+        el.appendChild(opt);
+      });
+    });
+    // Populate stock items in adder
+    const pd = document.getElementById('tf-new-product');
+    pd.innerHTML = '<option value="">-- Pilih item stok --</option>' +
+      stockItems.map(it=>`<option value="${it.id}">[${it.code}] ${it.name}</option>`).join('');
+    // Default filter: 7 hari terakhir
+    const today = todayLocal();
+    const d = new Date(); d.setDate(d.getDate()-6);
+    document.getElementById('tf-end').value = today;
+    document.getElementById('tf-start').value = (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));
+    await loadTransfers();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function loadTransfers() {
+  const s = document.getElementById('tf-start').value;
+  const e = document.getElementById('tf-end').value;
+  const params = new URLSearchParams({limit:'100'});
+  if (s) params.set('start_date', s);
+  if (e) params.set('end_date', e);
+  allTransfers = await API.get('/stock/transfers?'+params.toString());
+  renderList();
+}
+
+function renderList() {
+  document.getElementById('tf-tbody').innerHTML = allTransfers.map(t => `
+    <tr>
+      <td style="font-family:ui-monospace,monospace;font-weight:700;color:#4f46e5">${t.transfer_code}</td>
+      <td style="font-size:12px">${fmt.dateTime(t.created_at)}</td>
+      <td>${t.from_branch_name||'-'}</td>
+      <td>${t.to_branch_name||'-'}</td>
+      <td style="text-align:right;font-weight:600">${t.item_count||0}</td>
+      <td style="text-align:right;font-weight:700">${t.total_qty||0}</td>
+      <td style="font-size:12px;color:#6b7280">${t.operator_name||'-'}</td>
+      <td><button class="btn btn-secondary btn-sm" onclick="showDetail(${t.id})">📋 Detail</button></td>
+    </tr>
+  `).join('') || '<tr><td colspan="8" style="text-align:center;padding:30px;color:#9ca3af">Belum ada transfer</td></tr>';
+}
+
+function setQuick(range) {
+  const today = todayLocal();
+  const d = new Date();
+  let start = today;
+  if (range === 'week') { d.setDate(d.getDate()-6); start = (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')); }
+  else if (range === 'month') { start = today.slice(0,8)+'01'; }
+  document.getElementById('tf-start').value = start;
+  document.getElementById('tf-end').value = today;
+  loadTransfers();
+}
+
+async function onFromChange() {
+  const fromId = document.getElementById('tf-from').value;
+  if (!fromId) { currentStocks = []; return; }
+  const r = await API.get('/stock/products?branch_id='+fromId);
+  currentStocks = r.stocks || [];
+  updateStockInfo();
+}
+function updateStockInfo() {
+  const pid = parseInt(document.getElementById('tf-new-product').value);
+  if (!pid || !currentStocks.length) { document.getElementById('tf-stock-info').textContent = ''; return; }
+  const s = currentStocks.find(x=>x.product_id===pid);
+  if (s) document.getElementById('tf-stock-info').textContent = `Stok tersedia di cabang asal: ${s.current_stock} ${s.unit||''}`;
+  else document.getElementById('tf-stock-info').textContent = 'Item ini belum ada stok di cabang asal';
+}
+
+function openNewModal() {
+  document.getElementById('tf-from').value = '';
+  document.getElementById('tf-to').value = '';
+  document.getElementById('tf-notes').value = '';
+  document.getElementById('tf-new-product').value = '';
+  document.getElementById('tf-new-qty').value = 1;
+  currentItems = [];
+  renderTfItems();
+  openModal('new-modal');
+}
+document.addEventListener('change', ev => {
+  if (ev.target.id === 'tf-new-product') updateStockInfo();
+});
+
+function renderTfItems() {
+  const box = document.getElementById('tf-items-list');
+  if (!currentItems.length) {
+    box.innerHTML = '<div style="padding:12px;text-align:center;color:#9ca3af;font-size:12px;background:white;border-radius:8px">Belum ada item. Tambahkan di bawah 👇</div>';
+    return;
+  }
+  box.innerHTML = currentItems.map((it,i) => {
+    const p = stockItems.find(x=>x.id===it.product_id);
+    return `<div class="tf-item-row">
+      <div><strong>${p?.name||'?'}</strong> <span style="font-size:11px;color:#6b7280;font-family:ui-monospace,monospace">${p?.code||''}</span></div>
+      <div style="font-family:ui-monospace,monospace;font-weight:700;color:#4f46e5">× ${it.quantity}</div>
+      <button type="button" class="btn-icon" onclick="removeTfItem(${i})" style="color:#ef4444">🗑️</button>
+    </div>`;
+  }).join('');
+}
+function addTfItem() {
+  const pid = parseInt(document.getElementById('tf-new-product').value);
+  const qty = parseInt(document.getElementById('tf-new-qty').value);
+  if (!pid) return showToast('Pilih item','warning');
+  if (!qty || qty<=0) return showToast('Qty harus > 0','warning');
+  if (currentItems.some(x=>x.product_id===pid)) return showToast('Item sudah ditambahkan','warning');
+  const s = currentStocks.find(x=>x.product_id===pid);
+  if (s && qty > s.current_stock) return showToast(`Melebihi stok tersedia (${s.current_stock})`,'warning');
+  currentItems.push({product_id:pid, quantity:qty});
+  document.getElementById('tf-new-product').value = '';
+  document.getElementById('tf-new-qty').value = 1;
+  document.getElementById('tf-stock-info').textContent = '';
+  renderTfItems();
+}
+function removeTfItem(i) {
+  currentItems.splice(i,1);
+  renderTfItems();
+}
+
+async function saveTransfer() {
+  const from_branch_id = parseInt(document.getElementById('tf-from').value);
+  const to_branch_id = parseInt(document.getElementById('tf-to').value);
+  const notes = document.getElementById('tf-notes').value.trim();
+  if (!from_branch_id) return showToast('Pilih cabang asal','warning');
+  if (!to_branch_id) return showToast('Pilih cabang tujuan','warning');
+  if (from_branch_id === to_branch_id) return showToast('Cabang asal & tujuan tidak boleh sama','warning');
+  if (!currentItems.length) return showToast('Tambahkan minimal 1 item','warning');
+  try {
+    const r = await API.post('/stock/transfer', {from_branch_id, to_branch_id, items:currentItems, notes});
+    showToast(`Transfer berhasil (${r.transfer_code})`,'success');
+    closeModal('new-modal');
+    await loadTransfers();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function showDetail(id) {
+  const d = await API.get('/stock/transfers/'+id);
+  document.getElementById('detail-title').textContent = 'Transfer '+d.transfer_code;
+  document.getElementById('detail-body').innerHTML = `
+    <div style="margin-bottom:12px;padding:10px;background:#f8fafc;border-radius:8px;font-size:13px">
+      <div><strong>Dari:</strong> ${d.from_branch_name}</div>
+      <div><strong>Ke:</strong> ${d.to_branch_name}</div>
+      <div><strong>Waktu:</strong> ${fmt.dateTime(d.created_at)}</div>
+      <div><strong>Operator:</strong> ${d.operator_name||'-'}</div>
+      ${d.notes?`<div><strong>Catatan:</strong> ${d.notes}</div>`:''}
+    </div>
+    <div class="table-wrapper"><table class="tf-tbl">
+      <thead><tr><th>Item</th><th>Kode</th><th style="text-align:right">Qty</th></tr></thead>
+      <tbody>${d.items.map(it=>`<tr>
+        <td>${it.product_name}</td>
+        <td style="font-family:ui-monospace,monospace;font-size:11px;color:#6b7280">${it.product_code}</td>
+        <td style="text-align:right;font-weight:700">${it.quantity} ${it.unit||''}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+  `;
+  openModal('detail-modal');
+}
+
+function exportExcel(btn) {
+  if (!allTransfers.length) return showToast('Belum ada data untuk diekspor','warning');
+  downloadExcel({
+    filename: 'transfer-stok-' + getToday(),
+    sheets: [{
+      name: 'Transfer Stok',
+      title: 'Riwayat Transfer Stok Antar Cabang \u2014 Ujang Kedu',
+      meta: excelMeta([['Jumlah pengiriman', allTransfers.length]]),
+      columns: [
+        { header:'Kode', key:'kode', width:20 },
+        { header:'Waktu', key:'waktu', type:'datetime' },
+        { header:'Dari', key:'dari' },
+        { header:'Ke', key:'ke' },
+        { header:'Jenis Item', key:'item', type:'number' },
+        { header:'Total Qty', key:'qty', type:'number' },
+        { header:'Operator', key:'operator' },
+      ],
+      rows: allTransfers.map(t => ({
+        kode:t.transfer_code, waktu:t.created_at, dari:t.from_branch_name||'-', ke:t.to_branch_name||'-',
+        item:t.item_count||0, qty:t.total_qty||0, operator:t.operator_name||'-',
+      })),
+      totals: { kode:'TOTAL', qty: allTransfers.reduce((a,t)=>a+(t.total_qty||0),0) },
+    }],
+  }, btn);
+}
+
+loadAll();
+</script>
+</body>
+</html>

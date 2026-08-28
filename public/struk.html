@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pengaturan Struk — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.struk-editor { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:20px; align-items:start; }
+@media (max-width: 900px) { .struk-editor { grid-template-columns: minmax(0,1fr) !important; } }
+.side-panel { background:#fff; border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:16px; }
+.preview-panel { background:#f4f4f5; border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:16px; }
+.paper-shell { background:#fff; border-radius:4px; box-shadow:0 2px 14px rgba(0,0,0,.14);
+               margin:0 auto; overflow:hidden; width:max-content; max-width:100%; }
+#receipt-frame { display:block; border:0; background:#fff; width:58mm; height:420px; max-width:100%; }
+.logo-thumb-box { width:110px; height:84px; border:2px dashed var(--border); border-radius:8px; display:flex; align-items:center; justify-content:center; background:var(--bg-light); overflow:hidden; }
+.logo-thumb-box img { max-width:104px; max-height:78px; object-fit:contain; }
+.range-row { display:flex; align-items:center; gap:10px; }
+.range-row input[type=range] { flex:1; }
+.range-val { font-size:12px; font-weight:700; min-width:44px; text-align:right; color:var(--text-muted); }
+.hint { font-size:11px; color:var(--text-muted); margin-top:4px; line-height:1.5; }
+</style>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">🖨️ Pengaturan Struk</div><div class="page-subtitle">Kustomisasi tampilan struk / faktur penjualan</div></div>
+    <div class="top-bar-actions">
+      <button class="btn btn-secondary" onclick="doPrintTest()">🖨️ Cetak Test</button>
+      <button class="btn btn-primary" id="save-btn" onclick="saveSettings()">💾 Simpan</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="struk-editor">
+      <!-- ============ KIRI: FORM ============ -->
+      <div>
+        <!-- Logo -->
+        <div class="card mb-4">
+          <div class="card-header"><span class="card-title">🖼️ Logo Toko</span></div>
+          <div class="card-body">
+            <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+              <div>
+                <div id="logo-preview-box" class="logo-thumb-box"><span style="font-size:32px">🦐</span></div>
+                <button class="btn btn-secondary btn-sm" style="margin-top:6px;width:110px" onclick="document.getElementById('logo-file').click()">Upload</button>
+                <button class="btn btn-secondary btn-sm" style="margin-top:4px;width:110px;color:var(--danger)" onclick="removeLogo()">Hapus</button>
+              </div>
+              <div style="flex:1;min-width:220px">
+                <input type="file" id="logo-file" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" onchange="handleLogoUpload(this)">
+                <div class="form-group">
+                  <label class="form-label">Atau tempel URL gambar</label>
+                  <div style="display:flex;gap:8px">
+                    <input type="text" id="s-logo-url" class="form-control" placeholder="https://..." style="flex:1">
+                    <button class="btn btn-secondary btn-sm" onclick="applyLogoUrl()">Muat</button>
+                  </div>
+                  <div class="hint">Gambar dari URL otomatis diunduh &amp; ditanam ke pengaturan, supaya tetap tercetak walau internet mati.</div>
+                </div>
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px">
+                  <input type="checkbox" id="s-show-logo" checked onchange="schedulePreview()" style="width:18px;height:18px">
+                  <span>Cetak logo di struk</span>
+                </label>
+                <div class="form-group" style="margin-bottom:0">
+                  <label class="form-label">Lebar logo</label>
+                  <div class="range-row">
+                    <input type="range" id="s-logo-width" min="15" max="100" step="5" value="55" oninput="schedulePreview()">
+                    <span class="range-val" id="logo-width-val">55%</span>
+                  </div>
+                  <div class="hint">Persen dari lebar area cetak. <span id="logo-dots-hint"></span></div>
+                </div>
+              </div>
+            </div>
+            <div class="hint" style="margin-top:10px">✅ Format: PNG, JPG, GIF, WEBP &nbsp;·&nbsp; ✅ Otomatis diperkecil ke 384px &amp; dikompres &nbsp;·&nbsp; ✅ Logo <b>hitam-putih kontras tinggi</b> paling tajam di printer thermal</div>
+            <input type="hidden" id="s-logo">
+          </div>
+        </div>
+
+        <!-- Kertas -->
+        <div class="card mb-4">
+          <div class="card-header"><span class="card-title">📄 Ukuran Kertas</span></div>
+          <div class="card-body">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Lebar kertas printer</label>
+              <select id="s-paper" class="form-control" onchange="schedulePreview()">
+                <option value="58">58 mm — thermal kecil (32 karakter/baris)</option>
+                <option value="80">80 mm — thermal besar (48 karakter/baris)</option>
+              </select>
+              <div class="hint">Menentukan lebar halaman cetak, jumlah karakter per baris, dan resolusi logo yang dikirim ke printer Bluetooth.</div>
+            </div>
+            <div class="form-group" style="margin-bottom:0;margin-top:16px">
+              <label class="form-label">Margin kiri &amp; kanan</label>
+              <div class="range-row">
+                <input type="range" id="s-margin" min="0" max="8" step="0.5" value="3" oninput="schedulePreview()">
+                <span class="range-val" id="margin-val">3 mm</span>
+              </div>
+              <div class="hint">Jarak teks ke tepi kertas. Naikkan bila hasil cetak terlihat mepet atau ada karakter terpotong di sisi kanan.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Info Toko -->
+        <div class="card mb-4">
+          <div class="card-header"><span class="card-title">🏪 Informasi Toko</span></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Nama Toko</label>
+              <input type="text" id="s-store-name" class="form-control" oninput="schedulePreview()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tagline / Subtitle</label>
+              <input type="text" id="s-tagline" class="form-control" placeholder="Kuliner Udang Semarang" oninput="schedulePreview()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Alamat</label>
+              <input type="text" id="s-address" class="form-control" oninput="schedulePreview()">
+            </div>
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label">No. Telepon / WhatsApp</label>
+                <input type="text" id="s-phone" class="form-control" oninput="schedulePreview()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Instagram / Sosmed</label>
+                <input type="text" id="s-instagram" class="form-control" placeholder="@ujangkedu.smg" oninput="schedulePreview()">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="card mb-4">
+          <div class="card-header"><span class="card-title">📝 Pesan di Struk</span></div>
+          <div class="card-body">
+            <div class="form-group" style="margin-bottom:0">
+              <label class="form-label">Pesan Penutup (bisa multi-baris)</label>
+              <textarea id="s-footer" class="form-control" rows="4" placeholder="Terima kasih sudah membeli!&#10;Selamat menikmati..." oninput="schedulePreview()"></textarea>
+              <div class="hint">Gunakan Enter untuk baris baru. Emoji tidak bisa dicetak printer thermal Bluetooth.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Elemen -->
+        <div class="card">
+          <div class="card-header"><span class="card-title">⚙️ Elemen Struk</span></div>
+          <div class="card-body">
+            <div style="display:grid;gap:10px">
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                <input type="checkbox" id="s-show-cashier" onchange="schedulePreview()" style="width:18px;height:18px">
+                <span>Tampilkan nama kasir</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                <input type="checkbox" id="s-show-datetime" onchange="schedulePreview()" style="width:18px;height:18px">
+                <span>Tampilkan tanggal &amp; waktu</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                <input type="checkbox" id="s-show-invoice" onchange="schedulePreview()" style="width:18px;height:18px">
+                <span>Tampilkan nomor invoice</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ KANAN: AKSI CETAK ============ -->
+      <div class="preview-panel">
+        <div style="font-size:13px;font-weight:700;text-align:center;margin-bottom:10px;color:var(--text-muted)">📋 PREVIEW STRUK (ukuran asli)</div>
+        <div class="paper-shell"><iframe id="receipt-frame" title="Preview struk" scrolling="no"></iframe></div>
+      </div>
+
+      <div class="side-panel">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px">🖨️ Uji Cetak</div>
+        <p class="hint" style="margin:0 0 10px">Cetak contoh struk memakai pengaturan yang sedang ditampilkan di form, walau belum disimpan.</p>
+        <button class="btn btn-secondary w-100" onclick="doPrintTest()">🖨️ Cetak Struk Contoh</button>
+
+        <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--border)">
+          <div style="font-size:13px;font-weight:700;margin-bottom:6px">📶 Printer Bluetooth</div>
+          <div class="bt-status" style="font-size:12px;text-align:center;margin-bottom:8px">⚪ Belum terhubung</div>
+          <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+            <button class="btn btn-outline btn-sm btn-bt-print" onclick="connectBluetoothPrinter(false)">🔗 Hubungkan</button>
+            <button class="btn btn-primary btn-sm btn-bt-print" onclick="doPrintTestBT()">🧾 Tes Cetak BT</button>
+          </div>
+          <div id="bt-help" class="hint" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+initPage('struk','Pengaturan Struk','Kustomisasi tampilan struk penjualan');
+
+let settings = {};
+
+/* ---------- data contoh untuk preview & tes cetak ---------- */
+function sampleSale(invoice) {
+  return {
+    invoice_number: invoice || 'MG010001',
+    cashier_name: 'Kasir UNDIP',
+    customer_name: 'Pelanggan Umum',
+    channel: 'langsung',
+    created_at: fmt.nowWibSql(),
+    items: [
+      { product_name:'Udang Keju Original', quantity:2, sell_price:15000, subtotal:30000 },
+      { product_name:'Mix Udang (Ori 2, Nash 2)', quantity:1, sell_price:15000, subtotal:15000 }
+    ],
+    subtotal:45000, discount_amount:2000, total:43000,
+    payment_method:'cash', payment_amount:50000, change_amount:7000
+  };
+}
+
+/* ---------- load ---------- */
+async function loadSettings() {
+  try {
+    settings = await getReceiptSettings(true) || {};
+    const g = (k, d) => (settings[k] != null && settings[k] !== '') ? settings[k] : d;
+
+    document.getElementById('s-logo').value        = settings.receipt_logo || '';
+    document.getElementById('s-logo-url').value    = /^https?:/i.test(settings.receipt_logo || '') ? settings.receipt_logo : '';
+    document.getElementById('s-store-name').value  = g('receipt_store_name','Ujang Kedu');
+    document.getElementById('s-tagline').value     = g('receipt_tagline','Kuliner Udang Semarang');
+    document.getElementById('s-address').value     = g('receipt_address','');
+    document.getElementById('s-phone').value       = g('receipt_phone','');
+    document.getElementById('s-instagram').value   = g('receipt_instagram','');
+    document.getElementById('s-footer').value      = g('receipt_footer','');
+    document.getElementById('s-paper').value       = g('receipt_paper','58');
+    document.getElementById('s-margin').value      = g('receipt_margin','3');
+    document.getElementById('s-logo-width').value  = g('receipt_logo_width','55');
+    document.getElementById('s-show-logo').checked     = settings.receipt_show_logo     !== '0';
+    document.getElementById('s-show-cashier').checked  = settings.receipt_show_cashier  !== '0';
+    document.getElementById('s-show-datetime').checked = settings.receipt_show_datetime !== '0';
+    document.getElementById('s-show-invoice').checked  = settings.receipt_show_invoice  !== '0';
+
+    setLogoPreview(settings.receipt_logo || '');
+    updatePreview();
+  } catch(e) { showToast(e.message,'error'); updatePreview(); }
+}
+
+/* ---------- logo ---------- */
+function setLogoPreview(src) {
+  document.getElementById('s-logo').value = src || '';
+  const box = document.getElementById('logo-preview-box');
+  if (src) {
+    const img = new Image();
+    img.alt = 'Logo';
+    img.onload = () => { box.innerHTML = ''; box.appendChild(img); };
+    img.onerror = () => { box.innerHTML = '<span style="font-size:11px;color:var(--danger);text-align:center;padding:6px">Gambar tidak bisa dimuat</span>'; };
+    img.src = src;
+  } else {
+    box.innerHTML = '<span style="font-size:32px">🦐</span>';
+  }
+  schedulePreview();
+}
+
+async function handleLogoUpload(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  if (!/^image\//.test(file.type)) { showToast('File harus berupa gambar','warning'); input.value=''; return; }
+  if (file.size > 4 * 1024 * 1024) { showToast('Ukuran file maksimal 4MB','warning'); input.value=''; return; }
+  try {
+    const raw = await new Promise((ok,no) => {
+      const r = new FileReader();
+      r.onload = () => ok(r.result);
+      r.onerror = () => no(new Error('Gagal membaca file'));
+      r.readAsDataURL(file);
+    });
+    let out;
+    try { out = await normalizeLogoDataUrl(raw, 384); } catch(e) { out = raw; }
+    if (out.length > 1.2 * 1024 * 1024) { showToast('Logo masih terlalu besar setelah dikompres. Pakai gambar yang lebih sederhana.','warning'); return; }
+    document.getElementById('s-logo-url').value = '';
+    setLogoPreview(out);
+    showToast('Logo dimuat ✅ Jangan lupa klik Simpan','success');
+  } catch(e) {
+    showToast('Gagal memuat logo: ' + (e.message||e), 'error');
+  } finally { input.value = ''; }
+}
+
+async function applyLogoUrl() {
+  const url = document.getElementById('s-logo-url').value.trim();
+  if (!url) { showToast('Isi dulu URL gambarnya','warning'); return; }
+  if (!/^https?:\/\//i.test(url)) { showToast('URL harus diawali http:// atau https://','warning'); return; }
+  showToast('Mengunduh gambar...','info',1500);
+  try {
+    const dataUrl = await resolveLogoDataUrl(url);
+    if (/^data:image\//i.test(dataUrl)) {
+      const out = await normalizeLogoDataUrl(dataUrl, 384);
+      setLogoPreview(out);
+      showToast('Logo tertanam dari URL ✅ Jangan lupa Simpan','success');
+    } else {
+      setLogoPreview(url);
+      showToast('Gambar tidak bisa diunduh (diblokir CORS). Disimpan sebagai URL — pastikan device kasir online saat mencetak.','warning',6000);
+    }
+  } catch(e) {
+    showToast('Gagal memuat URL: ' + (e.message||e),'error');
+  }
+}
+
+function removeLogo() {
+  document.getElementById('s-logo').value = '';
+  document.getElementById('s-logo-url').value = '';
+  document.getElementById('logo-file').value = '';
+  document.getElementById('logo-preview-box').innerHTML = '<span style="font-size:32px">🦐</span>';
+  schedulePreview();
+}
+
+/* ---------- form -> object ---------- */
+function getFormSettings() {
+  return {
+    receipt_logo: document.getElementById('s-logo').value || '',
+    receipt_show_logo: document.getElementById('s-show-logo').checked ? '1' : '0',
+    receipt_logo_width: String(document.getElementById('s-logo-width').value || '55'),
+    receipt_paper: document.getElementById('s-paper').value || '58',
+    receipt_margin: String(document.getElementById('s-margin').value || '3'),
+    receipt_store_name: document.getElementById('s-store-name').value || 'Ujang Kedu',
+    receipt_tagline: document.getElementById('s-tagline').value || '',
+    receipt_address: document.getElementById('s-address').value || '',
+    receipt_phone: document.getElementById('s-phone').value || '',
+    receipt_instagram: document.getElementById('s-instagram').value || '',
+    receipt_footer: document.getElementById('s-footer').value || '',
+    receipt_show_cashier: document.getElementById('s-show-cashier').checked ? '1' : '0',
+    receipt_show_datetime: document.getElementById('s-show-datetime').checked ? '1' : '0',
+    receipt_show_invoice: document.getElementById('s-show-invoice').checked ? '1' : '0'
+  };
+}
+
+/* ---------- preview: renderer yang SAMA dengan hasil cetak ---------- */
+let _previewTimer = null;
+function schedulePreview() {
+  clearTimeout(_previewTimer);
+  _previewTimer = setTimeout(updatePreview, 180);
+}
+
+function updatePreview() {
+  const s = getFormSettings();
+  const paper = getPaperProfile(s);
+  const inner = Math.max(20, paper.contentMm - getReceiptMargin(s) * 2);
+
+  document.getElementById('logo-width-val').textContent = s.receipt_logo_width + '%';
+  document.getElementById('margin-val').textContent = s.receipt_margin + ' mm';
+  document.getElementById('logo-dots-hint').textContent =
+    '\u2248 ' + Math.round(paper.dots * getLogoWidthPct(s) / 100) + ' dot (' +
+    (inner * getLogoWidthPct(s) / 100).toFixed(0) + ' mm) di kertas ' + paper.pageMm + 'mm.';
+
+  // Pratinjau memakai renderer yang SAMA PERSIS dengan hasil cetak, lewat
+  // srcdoc (bukan memuat URL halaman lain), jadi tidak bisa berpindah halaman
+  // dan tidak mungkin menimpa tata letak di sekitarnya.
+  const frame = document.getElementById('receipt-frame');
+  if (!frame) return;
+  frame.style.width = paper.contentMm + 'mm';
+  frame.onload = () => {
+    try {
+      const h = frame.contentDocument.body.scrollHeight;
+      frame.style.height = Math.max(240, h + 16) + 'px';
+    } catch (e) {}
+  };
+  frame.srcdoc = buildReceiptHTML(sampleSale(), s, { logo: s.receipt_logo });
+}
+
+/* ---------- simpan ---------- */
+async function saveSettings() {
+  const s = getFormSettings();
+  const btn = document.getElementById('save-btn');
+  const oldLabel = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Menyimpan...';
+  try {
+    await API.post('/settings', s);
+    settings = s;
+    clearReceiptCache();            // paksa semua halaman ambil pengaturan baru
+    await getReceiptSettings(true); // hangatkan cache lagi
+    showToast('Pengaturan struk berhasil disimpan ✅','success');
+  } catch(e) {
+    showToast(e.message,'error');
+  } finally {
+    btn.disabled = false; btn.textContent = oldLabel;
+  }
+}
+
+/* ---------- tes cetak ---------- */
+async function doPrintTest() {
+  const s = getFormSettings();
+  try {
+    const logo = (s.receipt_show_logo !== '0' && s.receipt_logo)
+      ? await resolveLogoDataUrl(s.receipt_logo) : '';
+    await printHtmlDocument(buildReceiptHTML(sampleSale('TEST-0001'), s, { logo }));
+  } catch(e) {
+    showToast('Gagal cetak test: ' + (e.message||e),'error');
+  }
+}
+
+async function doPrintTestBT() {
+  if (typeof escposFromSale !== 'function') return;
+  if (!btPrinter.characteristic) { const ok = await connectBluetoothPrinter(false); if (!ok) return; }
+  try {
+    // pakai pengaturan yang sedang diedit, walau belum disimpan
+    const bytes = await escposFromSale(sampleSale('TEST-0001'), getFormSettings());
+    await btWrite(bytes);
+    showToast('Struk tes dikirim ke printer 🖨️','success');
+  } catch(e) {
+    showToast('Gagal cetak Bluetooth: ' + (e.message||e),'error');
+    btPrinter.characteristic = null; updateBtIndicator();
+  }
+}
+
+/* ---------- info bantuan ---------- */
+(function(){
+  const help = document.getElementById('bt-help');
+  if (!help) return;
+  if (typeof BT_SUPPORTED !== 'undefined' && BT_SUPPORTED) {
+    help.innerHTML = 'Tombol Bluetooth di sini untuk printer <b>BLE</b>. Kebanyakan printer thermal 58mm murah bertipe <b>Bluetooth Classic</b> — untuk itu paling stabil pakai tombol <b>Cetak Struk</b> biasa + aplikasi <b>RawBT</b> (Android) sebagai print service.';
+  } else {
+    help.innerHTML = 'Cetak Bluetooth langsung butuh Chrome/Android &amp; koneksi aman (localhost atau HTTPS). Untuk printer Bluetooth thermal, gunakan tombol <b>Cetak Struk</b> lalu pilih printer lewat sistem / aplikasi <b>RawBT</b>.';
+  }
+  if (typeof initPrintUI === 'function') setTimeout(initPrintUI, 300);
+})();
+
+loadSettings();
+</script>
+</body>
+</html>

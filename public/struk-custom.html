@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Struk Custom — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.tpl-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+.tpl-card { border:1.5px solid var(--border); border-radius:12px; padding:15px; background:#fff; }
+.tpl-card.off { opacity:.6; background:var(--bg-light); }
+.tpl-card h3 { margin:0 0 5px; font-size:15.5px; }
+.tpl-meta { font-size:12px; color:var(--text-muted); line-height:1.55; margin-bottom:12px; }
+.tpl-chip { display:inline-block; background:var(--bg-light); border-radius:20px; padding:2px 9px; font-size:10.5px; font-weight:600; margin:2px 3px 0 0; }
+.editor { display:grid; grid-template-columns:1fr 320px; gap:18px; align-items:start; }
+@media (max-width:900px){ .editor{grid-template-columns:1fr} .tpl-grid{grid-template-columns:1fr} }
+.ov-row { display:flex; align-items:center; gap:9px; padding:9px 0; border-bottom:1px dashed var(--border); }
+.ov-row:last-child { border-bottom:0; }
+.ov-row label { flex:0 0 128px; font-size:13px; font-weight:600; }
+.ov-row .ctl { flex:1; min-width:0; }
+.ov-row input[type=checkbox] { width:17px;height:17px;flex-shrink:0 }
+.hint { font-size:11px; color:var(--text-muted); line-height:1.55; }
+</style>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">🧾 Struk Custom</div><div class="page-subtitle">Format struk khusus per pelanggan / kebutuhan</div></div>
+    <div class="top-bar-actions">
+      <a class="btn btn-secondary" href="/struk.html" data-perm="settings.receipt">🖨️ Struk Default</a>
+      <button class="btn btn-primary" data-perm="settings.receipt_custom" onclick="openEditor()">+ Template Baru</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:13px;color:#065f46;line-height:1.65">
+      🛡️ <b>Aman untuk struk default.</b> Template di halaman ini disimpan terpisah dari pengaturan struk default.
+      Field yang Anda kosongkan otomatis <b>mengikuti struk default</b>; yang Anda isi hanya menimpa untuk template ini saja.
+      Mengubah atau menghapus template <b>tidak pernah</b> memengaruhi struk default.
+    </div>
+
+    <div id="list-view">
+      <div class="tpl-grid" id="tpl-grid"></div>
+    </div>
+
+    <!-- Editor -->
+    <div id="editor-view" style="display:none">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+        <button class="btn btn-secondary" onclick="backToList()">← Kembali</button>
+        <strong id="ed-title" style="font-size:16px;margin-right:auto">Template Baru</strong>
+        <button class="btn btn-secondary" onclick="testPrint()">🖨️ Cetak Test</button>
+        <button class="btn btn-primary" id="ed-save" onclick="saveTemplate()">💾 Simpan</button>
+      </div>
+
+      <div class="editor">
+        <div>
+          <div class="card mb-4">
+            <div class="card-header"><span class="card-title">📄 Identitas Template</span></div>
+            <div class="card-body">
+              <div class="grid-2">
+                <div class="form-group"><label class="form-label">Nama Template *</label>
+                  <input type="text" id="t-name" class="form-control" placeholder="mis. Struk Katering PT Maju"></div>
+                <div class="form-group"><label class="form-label">Khusus Pelanggan</label>
+                  <select id="t-customer" class="form-control"><option value="">— Semua pelanggan —</option></select></div>
+              </div>
+              <div class="form-group"><label class="form-label">Keterangan</label>
+                <input type="text" id="t-desc" class="form-control" placeholder="Kapan template ini dipakai"></div>
+              <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                <input type="checkbox" id="t-active" checked style="width:17px;height:17px">
+                <span style="font-size:13.5px"><b>Aktif</b> — muncul sebagai pilihan kasir saat mencetak</span></label>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><span class="card-title">✏️ Penimpaan Field</span>
+              <span style="margin-left:auto;font-size:11.5px;color:var(--text-muted)">kosong = ikut default</span></div>
+            <div class="card-body" id="ov-container"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card"><div class="card-body">
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px">🖨️ Uji Cetak Template</div>
+            <p class="hint" style="margin:0 0 10px">Bidang yang dikosongkan akan mengikuti nilai struk default. Cetak contoh untuk melihat hasil sebenarnya.</p>
+            <button class="btn btn-secondary w-100" onclick="testPrint()">🖨️ Cetak Contoh Template</button>
+            <div id="ov-summary" class="hint" style="margin-top:12px"></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+/* CATATAN PENTING — jangan bungkus ulang script ini dengan `if (...) { ... }`.
+   Deklarasi `async function` di dalam sebuah blok TIDAK terangkat ke scope
+   global (berbeda dengan `function` biasa yang terangkat lewat aturan warisan
+   Annex B). Kalau seluruh script dibungkus blok, atribut onclick pada tombol
+   tidak menemukan handler async-nya dan seluruh tombol menjadi mati.
+   Karena itu isi script berada di scope global, dan hanya baris bootstrap di
+   bagian bawah yang dijaga oleh PAGE_OK. */
+const PAGE_OK = initPage('struk-custom','Struk Custom','Format struk khusus');
+
+
+let templates = [], customers = [], defaults = {}, editingId = null;
+const esc = v => String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+/* Field yang boleh ditimpa template */
+const FIELDS = [
+  { key:'receipt_store_name', label:'Nama Toko', type:'text' },
+  { key:'receipt_tagline',    label:'Tagline',   type:'text' },
+  { key:'receipt_address',    label:'Alamat',    type:'text' },
+  { key:'receipt_phone',      label:'Telepon',   type:'text' },
+  { key:'receipt_instagram',  label:'Sosmed',    type:'text' },
+  { key:'receipt_header_note',label:'Catatan Atas', type:'text' },
+  { key:'receipt_footer',     label:'Pesan Penutup', type:'textarea' },
+  { key:'receipt_paper',      label:'Lebar Kertas', type:'select', options:[['','Ikut default'],['58','58 mm'],['80','80 mm']] },
+  { key:'receipt_logo_width', label:'Lebar Logo (%)', type:'number' },
+  { key:'receipt_margin',     label:'Margin Kiri/Kanan (mm)', type:'number' },
+  { key:'receipt_show_logo',      label:'Tampilkan Logo',    type:'tri' },
+  { key:'receipt_show_invoice',   label:'Nomor Invoice',     type:'tri' },
+  { key:'receipt_show_datetime',  label:'Tanggal & Waktu',   type:'tri' },
+  { key:'receipt_show_cashier',   label:'Nama Kasir',        type:'tri' },
+  { key:'receipt_signature_label',label:'Label Tanda Tangan', type:'text' },
+];
+
+async function load() {
+  try {
+    [templates, defaults] = await Promise.all([API.get('/receipt-templates?all=1'), getReceiptSettings(true)]);
+    try { customers = await API.get('/sales/meta/customers'); } catch(e) { customers = []; }
+    renderList();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+function renderList() {
+  const canEdit = Perms.can('settings.receipt_custom');
+  document.getElementById('tpl-grid').innerHTML = templates.map(t => {
+    const chips = Object.keys(t.config||{}).slice(0,5).map(k=>`<span class="tpl-chip">${k.replace('receipt_','')}</span>`).join('');
+    const more = Object.keys(t.config||{}).length - 5;
+    return `<div class="tpl-card ${t.is_active?'':'off'}">
+      <h3>🧾 ${esc(t.name)}</h3>
+      <div class="tpl-meta">${esc(t.description||'—')}
+        ${t.customer_name?`<br>👤 ${esc(t.customer_name)}`:''}
+        <br>${chips}${more>0?`<span class="tpl-chip">+${more}</span>`:''}
+        ${!t.is_active?'<br><span class="tpl-chip">NONAKTIF</span>':''}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="openEditor(${t.id})">${canEdit?'✏️ Ubah':'👁️ Lihat'}</button>
+        ${canEdit?`<button class="btn btn-secondary btn-sm" onclick="dupTemplate(${t.id})">📄</button>
+        <button class="btn btn-secondary btn-sm" style="color:var(--danger)" onclick="delTemplate(${t.id})">🗑️</button>`:''}
+      </div></div>`;
+  }).join('') || `<div style="grid-column:1/-1;text-align:center;padding:44px 20px;color:var(--text-muted)">
+      <div style="font-size:52px;margin-bottom:12px">🧾</div>
+      <p>Belum ada template struk custom.<br>Struk default tetap dipakai untuk semua transaksi.</p></div>`;
+}
+
+function renderOverrides(cfg) {
+  document.getElementById('ov-container').innerHTML = FIELDS.map(f => {
+    const val = cfg[f.key] !== undefined ? cfg[f.key] : '';
+    const ph = defaults[f.key] ? `default: ${String(defaults[f.key]).replace(/\n/g,' ').substring(0,26)}` : 'kosong';
+    let ctl;
+    if (f.type === 'textarea') ctl = `<textarea class="form-control ov" data-key="${f.key}" rows="2" placeholder="${esc(ph)}">${esc(val)}</textarea>`;
+    else if (f.type === 'select') ctl = `<select class="form-control ov" data-key="${f.key}">${f.options.map(([v,l])=>`<option value="${v}" ${String(val)===v?'selected':''}>${l}</option>`).join('')}</select>`;
+    else if (f.type === 'tri') ctl = `<select class="form-control ov" data-key="${f.key}">
+        <option value="" ${val===''?'selected':''}>Ikut default</option>
+        <option value="1" ${val==='1'?'selected':''}>Tampilkan</option>
+        <option value="0" ${val==='0'?'selected':''}>Sembunyikan</option></select>`;
+    else ctl = `<input type="${f.type==='number'?'number':'text'}" class="form-control ov" data-key="${f.key}" value="${esc(val)}" placeholder="${esc(ph)}">`;
+    return `<div class="ov-row"><label>${f.label}</label><div class="ctl">${ctl}</div></div>`;
+  }).join('');
+  document.querySelectorAll('.ov').forEach(el => {
+    el.addEventListener('input', schedulePreview);
+    el.addEventListener('change', schedulePreview);
+  });
+}
+
+function collectConfig() {
+  const cfg = {};
+  document.querySelectorAll('.ov').forEach(el => {
+    const v = String(el.value || '').trim();
+    if (v !== '') cfg[el.dataset.key] = v;
+  });
+  return cfg;
+}
+
+let _pt = null;
+function schedulePreview(){ clearTimeout(_pt); _pt = setTimeout(updatePreview, 200); }
+
+function updatePreview() {
+  // Preview struk sudah dihilangkan dari halaman pengaturan.
+  // Yang ditampilkan hanya ringkasan bidang mana saja yang ditimpa template ini.
+  const cfg = collectConfig();
+  const el = document.getElementById('ov-summary');
+  if (!el) return;
+  const keys = Object.keys(cfg);
+  if (!keys.length) {
+    el.textContent = 'Belum ada bidang yang ditimpa — template ini akan sama persis dengan struk default.';
+    return;
+  }
+  const labelOf = (k) => (FIELDS.find(f => f.key === k) || {}).label || k.replace('receipt_', '');
+  el.innerHTML = '<b>' + keys.length + ' bidang ditimpa:</b> ' +
+    keys.map(k => esc(labelOf(k))).join(', ');
+}
+
+function sampleSale() {
+  return { invoice_number:'UK0120260816001', cashier_name:'Kasir UNDIP', customer_name:'Pelanggan Umum',
+    created_at:fmt.nowWibSql(),
+    items:[{product_name:'Udang Keju Original',quantity:2,sell_price:15000,subtotal:30000},
+           {product_name:'Mix Udang (Ori 2, Nash 2)',quantity:1,sell_price:15000,subtotal:15000}],
+    subtotal:45000, discount_amount:2000, total:43000,
+    payment_method:'cash', payment_amount:50000, change_amount:7000 };
+}
+
+function openEditor(id) {
+  editingId = id || null;
+  const t = id ? templates.find(x=>x.id===id) : null;
+  const canEdit = Perms.can('settings.receipt_custom');
+
+  document.getElementById('ed-title').textContent = t ? ('Ubah: ' + t.name) : 'Template Baru';
+  document.getElementById('t-name').value = t ? t.name : '';
+  document.getElementById('t-desc').value = t ? (t.description||'') : '';
+  document.getElementById('t-active').checked = t ? !!t.is_active : true;
+  document.getElementById('t-customer').innerHTML = '<option value="">— Semua pelanggan —</option>' +
+    customers.map(c=>`<option value="${c.id}" ${t&&t.customer_id===c.id?'selected':''}>${esc(c.name)}</option>`).join('');
+  document.getElementById('ed-save').style.display = canEdit ? '' : 'none';
+
+  renderOverrides(t ? (t.config||{}) : {});
+  if (!canEdit) document.querySelectorAll('#editor-view input,#editor-view select,#editor-view textarea').forEach(e=>e.disabled=true);
+
+  document.getElementById('list-view').style.display = 'none';
+  document.getElementById('editor-view').style.display = '';
+  updatePreview();
+}
+
+function backToList() {
+  document.getElementById('editor-view').style.display = 'none';
+  document.getElementById('list-view').style.display = '';
+}
+
+async function saveTemplate() {
+  const name = document.getElementById('t-name').value.trim();
+  if (!name) return showToast('Nama template wajib diisi','warning');
+  const body = {
+    name, description: document.getElementById('t-desc').value.trim(),
+    customer_id: document.getElementById('t-customer').value || null,
+    is_active: document.getElementById('t-active').checked ? 1 : 0,
+    config: collectConfig(),
+  };
+  const btn = document.getElementById('ed-save'); btn.disabled = true;
+  try {
+    if (editingId) await API.put('/receipt-templates/'+editingId, body);
+    else await API.post('/receipt-templates', body);
+    clearTemplateCache();
+    showToast('Template tersimpan ✅ Struk default tidak berubah','success',4500);
+    await load(); backToList();
+  } catch(e) { showToast(e.message,'error'); }
+  btn.disabled = false;
+}
+
+async function testPrint() {
+  const merged = mergeReceiptSettings(defaults, collectConfig());
+  const logo = (isLogoEnabled(merged) && merged.receipt_logo) ? await resolveLogoDataUrl(merged.receipt_logo) : '';
+  await printHtmlDocument(buildReceiptHTML(sampleSale(), merged, { logo }));
+}
+
+function dupTemplate(id) {
+  API.post('/receipt-templates/'+id+'/duplicate', {})
+    .then(()=>{ clearTemplateCache(); showToast('Template diduplikat','success'); load(); })
+    .catch(e=>showToast(e.message,'error'));
+}
+
+function delTemplate(id) {
+  const t = templates.find(x=>x.id===id);
+  confirmDialog(`Hapus template <b>${esc(t.name)}</b>?<br><span style="font-size:12px;color:#6b7280">Struk default tidak akan terpengaruh.</span>`,
+    async () => {
+      try { await API.delete('/receipt-templates/'+id); clearTemplateCache(); showToast('Template dihapus','success'); load(); }
+      catch(e) { showToast(e.message,'error'); }
+    }, 'Hapus Template');
+}
+
+if (PAGE_OK) {
+  load();
+}
+</script>
+</body>
+</html>

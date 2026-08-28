@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Keuangan — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">📈 Dashboard Keuangan</div><div class="page-subtitle">Laba–rugi harian dari penjualan nyata (HPP dihitung per porsi)</div></div>
+    <div class="top-bar-actions"><button class="btn btn-secondary" onclick="exportExcel(this)">📗 Excel</button></div>
+  </div>
+
+  <div class="page-content">
+
+    <!-- Info dasar perhitungan -->
+    <div class="card" style="border-left:4px solid var(--secondary)">
+      <div class="card-header"><span class="card-title">🧮 Dasar Perhitungan (HPP per Porsi)</span>
+        <a href="/production.html" class="btn btn-secondary btn-sm">✏️ Ubah Konstanta</a>
+      </div>
+      <div style="padding:6px 4px">
+        <div class="grid-4" id="basis-row" style="gap:14px"></div>
+        <div style="margin-top:12px;background:#f8fafc;border:1px solid #eef2f7;border-radius:10px;padding:11px 14px;font-size:12px;color:var(--text-secondary);line-height:1.6" id="basis-note"></div>
+      </div>
+    </div>
+
+    <!-- Filter -->
+    <div class="card">
+      <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+        <div class="form-group" style="margin:0"><label class="form-label">Dari Tanggal</label><input type="date" id="f-start" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Sampai</label><input type="date" id="f-end" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Cabang</label><select id="f-branch" class="form-control"><option value="">Semua Cabang</option></select></div>
+        <button class="btn btn-secondary" onclick="loadData()">🔎 Terapkan</button>
+        <button class="btn btn-outline" onclick="preset(7)">7 hari</button>
+        <button class="btn btn-outline" onclick="preset(30)">30 hari</button>
+      </div>
+    </div>
+
+    <!-- KPI -->
+    <div class="grid-4 mb-4" id="kpi-row"></div>
+
+    <!-- Chart -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">📊 Omzet vs HPP & Surplus Harian</span></div>
+      <div style="height:300px"><canvas id="fin-chart"></canvas></div>
+    </div>
+
+    <!-- Tabel harian -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">📋 Rincian Harian</span></div>
+      <div class="table-wrapper" style="overflow-x:auto">
+        <table class="table" style="min-width:1050px;font-size:12px">
+          <thead><tr>
+            <th>Tanggal</th><th>Order</th><th>Porsi (est)</th><th>Omzet</th>
+            <th>HPP</th><th>Gross Margin</th><th>GM %</th><th>Opex</th><th>Surplus</th><th>% Surplus</th>
+          </tr></thead>
+          <tbody id="fin-tbody"></tbody>
+          <tfoot id="fin-tfoot"></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+// Gerbang halaman ditangani initPage() berdasarkan hak akses. Pemeriksaan
+// "harus admin" yang lama dihapus karena menendang keluar peran sah lain
+// (supervisor, tim produksi, runner) yang justru diberi izin untuk halaman ini.
+initPage('finance', 'Dashboard Keuangan', 'Laba–rugi harian dari penjualan nyata');
+
+let CFG = {}, ROWS = [], SUMMARY = {}, branches = [], finChart = null;
+const pct = (x, d=0) => (isFinite(x) ? (x*100).toFixed(d) : '0') + '%';
+const rp = (x) => fmt.currency(Math.round(x||0));
+const num = (x,d=1) => (Number(x)||0).toLocaleString('id-ID',{maximumFractionDigits:d});
+function fmtDate(s){ try { const d=new Date(s+'T00:00:00'); return d.toLocaleDateString('id-ID',{day:'2-digit',month:'short'}); } catch(e){ return s; } }
+function isoDaysAgo(n){ return daysAgoLocal(n); }   // tanggal WIB
+function todayStr(){ return getToday(); }           // tanggal WIB
+
+async function init() {
+  try { branches = await API.get('/branches'); } catch(e){ branches = []; }
+  document.getElementById('f-branch').innerHTML = '<option value="">Semua Cabang</option>' + branches.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  document.getElementById('f-start').value = isoDaysAgo(30);
+  document.getElementById('f-end').value = todayStr();
+  await loadData();
+}
+function preset(n){ document.getElementById('f-start').value = isoDaysAgo(n); document.getElementById('f-end').value = todayStr(); loadData(); }
+
+async function loadData() {
+  const s = document.getElementById('f-start').value, e = document.getElementById('f-end').value, b = document.getElementById('f-branch').value;
+  const qs = new URLSearchParams(); if(s)qs.set('start',s); if(e)qs.set('end',e); if(b)qs.set('branch_id',b);
+  try {
+    const data = await API.get('/finance/daily' + (qs.toString()?'?'+qs.toString():''));
+    CFG = data.config; ROWS = data.rows; SUMMARY = data.summary;
+    renderBasis(); renderKPI(); renderChart(); renderTable();
+  } catch(err){ showToast('Gagal memuat: '+err.message,'error'); }
+}
+
+function renderBasis() {
+  const c = CFG;
+  document.getElementById('basis-row').innerHTML = `
+    ${basisCell('Harga Jual / Porsi', rp(c.harga_jual))}
+    ${basisCell('HPP Bahan / Porsi', rp(c.hpp_bahan_per_porsi))}
+    ${basisCell('Packaging / Porsi', rp(c.hpp_packaging))}
+    ${basisCell('HPP Total / Porsi', rp(c.hpp_per_porsi))}
+  `;
+  document.getElementById('basis-note').innerHTML =
+    `<strong style="color:var(--text-primary)">HPP per porsi digenerate dari resep:</strong> HPP 1 resep (${rp(c.hpp_resep)}) ÷ porsi per resep (${num(c.porsi_per_resep,2)}) = ${rp(c.hpp_bahan_per_porsi)} bahan, + packaging ${rp(c.hpp_packaging)} = <strong>${rp(c.hpp_per_porsi)}</strong> per porsi. Porsi harian diestimasi dari omzet ÷ harga jual, lalu HPP = porsi × HPP per porsi.`;
+}
+function basisCell(label, val){
+  return `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+    <div style="font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.04em">${label}</div>
+    <div style="font-size:18px;font-weight:800;font-family:var(--font-mono);margin-top:4px">${val}</div></div>`;
+}
+
+function renderKPI() {
+  const s = SUMMARY;
+  document.getElementById('kpi-row').innerHTML = `
+    <div class="kpi-card primary"><div class="kpi-icon">💵</div><div class="kpi-label">Total Omzet</div><div class="kpi-value large">${rp(s.total_revenue)}</div><div class="kpi-change">${s.total_orders||0} order · ${s.days||0} hari</div></div>
+    <div class="kpi-card warning"><div class="kpi-icon">📦</div><div class="kpi-label">Total HPP</div><div class="kpi-value large">${rp(s.total_hpp)}</div><div class="kpi-change">${num(s.total_porsi,0)} porsi</div></div>
+    <div class="kpi-card secondary"><div class="kpi-icon">📊</div><div class="kpi-label">Gross Margin</div><div class="kpi-value large">${rp(s.total_gross_margin)}</div><div class="kpi-change">${pct(s.avg_gross_margin_pct)} dari omzet</div></div>
+    <div class="kpi-card ${s.total_surplus>=0?'success':'danger'}"><div class="kpi-icon">🎯</div><div class="kpi-label">Surplus Bersih</div><div class="kpi-value large">${rp(s.total_surplus)}</div><div class="kpi-change">setelah opex ${rp(s.total_opex)}</div></div>
+  `;
+}
+
+function renderChart() {
+  const ctx = document.getElementById('fin-chart');
+  const labels = ROWS.map(r=>fmtDate(r.date));
+  if (finChart) finChart.destroy();
+  finChart = new Chart(ctx, {
+    data: { labels, datasets: [
+      { type:'bar', label:'Omzet', data:ROWS.map(r=>Math.round(r.revenue)), backgroundColor:'rgba(30,111,232,0.18)', borderColor:'rgba(30,111,232,0.9)', borderWidth:1, borderRadius:6, maxBarThickness:38, categoryPercentage:0.6, barPercentage:0.8, order:3, yAxisID:'y' },
+      { type:'bar', label:'HPP', data:ROWS.map(r=>Math.round(r.hpp)), backgroundColor:'rgba(217,119,6,0.18)', borderColor:'rgba(217,119,6,0.9)', borderWidth:1, borderRadius:6, maxBarThickness:38, categoryPercentage:0.6, barPercentage:0.8, order:2, yAxisID:'y' },
+      { type:'line', label:'Surplus', data:ROWS.map(r=>Math.round(r.surplus)), borderColor:'#16a34a', backgroundColor:'rgba(22,163,74,0.08)', tension:0.35, borderWidth:2.5, pointRadius:3, pointHoverRadius:6, pointBackgroundColor:'#fff', pointBorderColor:'#16a34a', pointBorderWidth:2, fill:true, order:1, yAxisID:'y' },
+    ]},
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      layout:{ padding:{ top:8, right:8, left:4, bottom:4 } },
+      interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ position:'top', align:'end', labels:{ usePointStyle:true, boxWidth:8, padding:14, font:{ size:12 } } },
+        tooltip:{ backgroundColor:'#0f1f3d', padding:10, cornerRadius:8, callbacks:{ label:(c)=>'  '+c.dataset.label+': '+rp(c.parsed.y) } } },
+      scales:{ x:{ grid:{ display:false }, ticks:{ font:{ size:11 }, color:'#64748b' } },
+        y:{ grid:{ color:'#eef2f7' }, border:{ display:false }, ticks:{ font:{ size:11 }, color:'#94a3b8', callback:(v)=> (v>=1000||v<=-1000) ? 'Rp '+(v/1000).toLocaleString('id-ID')+'rb' : 'Rp '+v } } }
+    }
+  });
+}
+
+function renderTable() {
+  const tb = document.getElementById('fin-tbody');
+  if (!ROWS.length) { tb.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding:26px">Belum ada penjualan pada rentang ini.</td></tr>'; document.getElementById('fin-tfoot').innerHTML=''; return; }
+  tb.innerHTML = ROWS.map(r=>`<tr>
+    <td style="white-space:nowrap;font-weight:600">${fmtDate(r.date)}</td>
+    <td>${num(r.orders,0)}</td>
+    <td>${num(r.porsi,0)}</td>
+    <td class="font-mono" style="font-weight:700">${rp(r.revenue)}</td>
+    <td class="font-mono">${rp(r.hpp)}</td>
+    <td class="font-mono">${rp(r.gross_margin)}</td>
+    <td style="font-weight:700;color:${r.gross_margin_pct>=0.4?'var(--success)':'var(--warning)'}">${pct(r.gross_margin_pct)}</td>
+    <td class="font-mono">${rp(r.opex)}</td>
+    <td class="font-mono" style="font-weight:800;color:${r.surplus>=0?'var(--success)':'var(--danger)'}">${rp(r.surplus)}</td>
+    <td style="font-weight:700">${pct(r.surplus_pct)}</td>
+  </tr>`).join('');
+  const s = SUMMARY;
+  document.getElementById('fin-tfoot').innerHTML = `<tr style="background:var(--bg-light);font-weight:800">
+    <td>TOTAL</td><td>${num(s.total_orders,0)}</td><td>${num(s.total_porsi,0)}</td><td class="font-mono">${rp(s.total_revenue)}</td>
+    <td class="font-mono">${rp(s.total_hpp)}</td><td class="font-mono">${rp(s.total_gross_margin)}</td><td>${pct(s.avg_gross_margin_pct)}</td>
+    <td class="font-mono">${rp(s.total_opex)}</td><td class="font-mono" style="color:${s.total_surplus>=0?'var(--success)':'var(--danger)'}">${rp(s.total_surplus)}</td><td>${pct(s.avg_surplus_pct)}</td>
+  </tr>`;
+}
+
+init();
+
+
+/* Ekspor dashboard keuangan harian (omzet, HPP, margin, surplus). */
+function exportExcel(btn) {
+  if (!ROWS || !ROWS.length) return showToast('Belum ada data untuk diekspor','warning');
+  downloadExcel({
+    filename: 'dashboard-keuangan-' + getToday(),
+    sheets: [{
+      name:'Laba Rugi Harian', title:'Dashboard Keuangan Harian \u2014 Ujang Kedu',
+      meta: excelMeta([['Jumlah hari', ROWS.length]]),
+      columns:[
+        {header:'Tanggal',key:'tgl',type:'date'},{header:'Order',key:'order',type:'number'},{header:'Porsi',key:'porsi',type:'number'},
+        {header:'Omzet (Rp)',key:'omzet',type:'money'},{header:'HPP (Rp)',key:'hpp',type:'money'},
+        {header:'Laba Kotor (Rp)',key:'kotor',type:'money'},{header:'Margin Kotor',key:'margin',type:'percent'},
+        {header:'Beban Operasional (Rp)',key:'opex',type:'money'},{header:'Surplus (Rp)',key:'surplus',type:'money'}],
+      rows: ROWS.map(r => ({ tgl:r.date, order:r.orders||0, porsi:r.porsi||0, omzet:r.revenue||0, hpp:r.hpp||0,
+        kotor:r.gross_margin||0, margin:(r.gross_margin_pct||0)*100, opex:r.opex||0, surplus:r.surplus||0 })),
+      totals: { tgl:'TOTAL', order:ROWS.reduce((a,r)=>a+(r.orders||0),0), porsi:ROWS.reduce((a,r)=>a+(r.porsi||0),0),
+        omzet:ROWS.reduce((a,r)=>a+(r.revenue||0),0), hpp:ROWS.reduce((a,r)=>a+(r.hpp||0),0),
+        kotor:ROWS.reduce((a,r)=>a+(r.gross_margin||0),0), opex:ROWS.reduce((a,r)=>a+(r.opex||0),0),
+        surplus:ROWS.reduce((a,r)=>a+(r.surplus||0),0) },
+    }],
+  }, btn);
+}
+</script>
+</body>
+</html>

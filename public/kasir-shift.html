@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Buka / Tutup Kasir — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.shift-wrap { display:grid; grid-template-columns:1fr 380px; gap:18px; align-items:start; }
+@media (max-width:1000px){ .shift-wrap{grid-template-columns:1fr} }
+.stat-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:16px; }
+.stat-box { background:#fff; border:1.5px solid var(--border); border-radius:12px; padding:14px 16px; }
+.stat-box .lbl { font-size:11.5px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.4px; }
+.stat-box .val { font-size:20px; font-weight:800; margin-top:5px; font-variant-numeric:tabular-nums; }
+.stat-box.hi { background:linear-gradient(135deg,#0f1f3d,#1e6fe8); border-color:transparent; color:#fff; }
+.stat-box.hi .lbl { color:rgba(255,255,255,.75); }
+.method-row { display:flex; align-items:center; gap:11px; padding:11px 0; border-bottom:1px dashed var(--border); }
+.method-row:last-child { border-bottom:0; }
+.method-row .ic { font-size:20px; width:36px; height:36px; display:flex; align-items:center; justify-content:center; background:var(--bg-light); border-radius:9px; flex-shrink:0; }
+.method-row .nm { flex:1; min-width:0; }
+.method-row .nm b { display:block; font-size:14px; }
+.method-row .nm small { color:var(--text-muted); font-size:11.5px; }
+.method-row .amt { font-weight:800; font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
+.drawer-pill { font-size:10px; background:#ecfdf5; color:#047857; padding:2px 7px; border-radius:20px; font-weight:700; }
+.calc-line { display:flex; justify-content:space-between; gap:10px; padding:8px 0; font-size:14px; font-variant-numeric:tabular-nums; }
+.calc-line.sub { border-top:1px dashed var(--border); }
+.calc-line.total { border-top:2px solid var(--text-primary); font-weight:800; font-size:17px; padding-top:11px; margin-top:5px; }
+.calc-line .neg { color:var(--danger); }
+.calc-line .pos { color:var(--success); }
+.diff-box { border-radius:12px; padding:15px; text-align:center; margin-top:14px; }
+.diff-box.ok { background:#ecfdf5; border:1.5px solid #6ee7b7; }
+.diff-box.short { background:#fef2f2; border:1.5px solid #fecaca; }
+.diff-box.over { background:#fffbeb; border:1.5px solid #fde68a; }
+.diff-box .t { font-size:12px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; }
+.diff-box .v { font-size:26px; font-weight:800; margin-top:5px; font-variant-numeric:tabular-nums; }
+.big-input { font-size:22px !important; font-weight:800; text-align:right; font-variant-numeric:tabular-nums; padding:14px !important; }
+.quick-amt { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+.quick-amt button { flex:1; min-width:66px; padding:8px 4px; font-size:12px; font-weight:600; border:1.5px solid var(--border); background:#fff; border-radius:8px; cursor:pointer; }
+.quick-amt button:hover { border-color:var(--primary); background:var(--bg-light); }
+.empty-state { text-align:center; padding:50px 20px; }
+.empty-state .ic { font-size:60px; margin-bottom:14px; }
+.mv-item { display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px dashed var(--border); font-size:13px; }
+.mv-item:last-child { border-bottom:0; }
+.item-line { display:flex; justify-content:space-between; gap:10px; padding:7px 0; border-bottom:1px dashed var(--border); font-size:13px; }
+.item-line:last-child { border-bottom:0; }
+</style>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">🔐 Buka / Tutup Kasir</div><div class="page-subtitle" id="shift-sub">Memuat...</div></div>
+    <div class="top-bar-actions">
+      <button class="btn btn-secondary" onclick="refresh()">🔄 Muat Ulang</button>
+      <a class="btn btn-secondary" href="/shift-reports.html" data-perm-any="shift.report,shift.view_all,shift.view_own">📋 Riwayat</a>
+    </div>
+  </div>
+
+  <div class="page-content" id="content"></div>
+</div>
+
+<!-- Modal kas keluar/masuk -->
+<div class="modal-overlay" id="mv-modal">
+  <div class="modal-box" style="max-width:460px">
+    <div class="modal-header"><span class="modal-title" id="mv-title">Kas Keluar</span>
+      <span onclick="closeModal('mv-modal')" style="cursor:pointer;font-size:20px;margin-left:auto">✕</span></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Nominal *</label>
+        <input type="number" id="mv-amount" class="form-control big-input" placeholder="0" min="1" inputmode="numeric"></div>
+      <div class="form-group"><label class="form-label">Kategori</label>
+        <select id="mv-cat" class="form-control">
+          <option value="operasional">Operasional</option>
+          <option value="bahan">Belanja Bahan</option>
+          <option value="transport">Transport</option>
+          <option value="setoran">Setoran ke Owner</option>
+          <option value="lainnya">Lainnya</option>
+        </select></div>
+      <div class="form-group"><label class="form-label">Keterangan *</label>
+        <input type="text" id="mv-reason" class="form-control" placeholder="mis. Beli gas elpiji"></div>
+      <div class="form-group" style="margin-bottom:0"><label class="form-label">No. Bukti / Nota</label>
+        <input type="text" id="mv-ref" class="form-control" placeholder="opsional"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('mv-modal')">Batal</button>
+      <button class="btn btn-primary" id="mv-save" onclick="saveMovement()">💾 Catat</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+/* CATATAN PENTING — jangan bungkus ulang script ini dengan `if (...) { ... }`.
+   Deklarasi `async function` di dalam sebuah blok TIDAK terangkat ke scope
+   global (berbeda dengan `function` biasa yang terangkat lewat aturan warisan
+   Annex B). Kalau seluruh script dibungkus blok, atribut onclick pada tombol
+   tidak menemukan handler async-nya dan seluruh tombol menjadi mati.
+   Karena itu isi script berada di scope global, dan hanya baris bootstrap di
+   bagian bawah yang dijaga oleh PAGE_OK. */
+const PAGE_OK = initPage('shift','Buka / Tutup Kasir','Kelola shift kasir');
+
+
+let session = null, mvType = 'out';
+const rp = n => 'Rp ' + Math.round(Number(n)||0).toLocaleString('id-ID');
+const esc = v => String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+async function refresh() {
+  try {
+    const r = await API.get('/cashier/current');
+    session = r.session;
+    render();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+function render() {
+  const el = document.getElementById('content');
+  if (!session) { renderClosed(el); return; }
+  renderOpen(el);
+}
+
+/* ---------------- BELUM BUKA ---------------- */
+function renderClosed(el) {
+  document.getElementById('shift-sub').textContent = 'Kasir belum dibuka';
+  if (!Perms.can('pos.session_open')) {
+    el.innerHTML = `<div class="card"><div class="card-body empty-state">
+      <div class="ic">🔒</div><h2 style="margin:0 0 8px">Kasir belum dibuka</h2>
+      <p class="text-muted">Anda tidak punya hak akses untuk membuka kasir. Hubungi supervisor.</p></div></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="card" style="max-width:520px;margin:0 auto">
+    <div class="card-body" style="padding:32px 26px">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="font-size:56px;margin-bottom:10px">🔓</div>
+        <h2 style="margin:0 0 6px;font-size:21px">Buka Kasir</h2>
+        <p class="text-muted" style="font-size:13.5px;margin:0">Masukkan jumlah uang modal awal di laci sebelum mulai berjualan</p>
+      </div>
+
+      <!-- Shift selalu terikat ke akun yang sedang login. Ditampilkan agar kasir
+           tahu persis atas nama siapa dan cabang mana shift ini dibuka. -->
+      <div style="background:var(--bg-light);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:18px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted);margin-bottom:7px">Shift dibuka atas nama</div>
+        <div style="display:flex;justify-content:space-between;gap:10px;font-size:13.5px;padding:2px 0"><span class="text-muted">Akun</span><b id="who-name">-</b></div>
+        <div style="display:flex;justify-content:space-between;gap:10px;font-size:13.5px;padding:2px 0"><span class="text-muted">Peran</span><b id="who-role">-</b></div>
+        <div style="display:flex;justify-content:space-between;gap:10px;font-size:13.5px;padding:2px 0"><span class="text-muted">Cabang</span><b id="who-branch">-</b></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:8px;line-height:1.55">
+          Semua transaksi selama shift ini tercatat atas akun &amp; cabang di atas.
+          Kasir lain tidak bisa memakai maupun menutup shift ini.
+        </div>
+      </div>
+      <!-- Pilihan cabang hanya berisi cabang yang benar-benar boleh dipegang
+           akun ini. Daftarnya datang dari server, bukan dirakit di browser. -->
+      <div class="form-group" id="open-branch-group" style="display:none">
+        <label class="form-label">Cabang *</label>
+        <select id="open-branch" class="form-control"></select>
+        <div class="form-hint" style="margin-top:5px">Seluruh penjualan pada shift ini tercatat di cabang yang dipilih.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Saldo Awal (modal laci) *</label>
+        <input type="number" id="open-balance" class="form-control big-input" placeholder="0" min="0" inputmode="numeric">
+        <div class="quick-amt">
+          ${[100000,200000,300000,500000,1000000].map(v=>`<button onclick="setOpen(${v})">${(v/1000)}rb</button>`).join('')}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Catatan</label>
+        <input type="text" id="open-notes" class="form-control" placeholder="mis. Shift pagi">
+      </div>
+      <button class="btn btn-primary w-100 btn-lg" id="open-btn" onclick="openShift()">🔓 Buka Kasir & Mulai Berjualan</button>
+      <p style="font-size:11.5px;color:var(--text-muted);text-align:center;margin:14px 0 0;line-height:1.6">
+        Transaksi di halaman kasir baru bisa diproses setelah kasir dibuka.
+      </p>
+    </div></div>`;
+  fillWhoAmI();
+}
+
+/** Shift selalu milik akun yang sedang login — tampilkan identitasnya. */
+let cabangBoleh = [];
+async function fillWhoAmI() {
+  const u = Auth.getUser() || {};
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v || '-'; };
+  set('who-name', u.full_name || u.username);
+  set('who-role', u.role_name || (u.role === 'admin' ? 'Administrator' : 'Kasir'));
+
+  // Cabang yang boleh dibuka dihitung di server dari hak akses cabang user.
+  try { cabangBoleh = await API.get('/cashier/branches'); } catch (e) { cabangBoleh = []; }
+  const grup = document.getElementById('open-branch-group');
+  const sel = document.getElementById('open-branch');
+  if (!cabangBoleh.length) {
+    set('who-branch', 'Belum ada akses cabang');
+    const btn = document.getElementById('open-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '⚠️ Belum ada akses cabang'; }
+    showToast('Akun Anda belum diberi akses ke cabang mana pun. Hubungi admin.', 'warning', 6000);
+    return;
+  }
+  if (cabangBoleh.length === 1) {
+    set('who-branch', cabangBoleh[0].name);
+    if (grup) grup.style.display = 'none';
+  } else {
+    set('who-branch', cabangBoleh.length + ' cabang — pilih di bawah');
+    if (sel) sel.innerHTML = cabangBoleh.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+    if (grup) grup.style.display = '';
+  }
+}
+
+function setOpen(v){ document.getElementById('open-balance').value = v; }
+
+async function openShift() {
+  const v = document.getElementById('open-balance').value;
+  if (v === '' || isNaN(v) || Number(v) < 0) return showToast('Isi saldo awal dengan angka yang benar','warning');
+  const btn = document.getElementById('open-btn'); btn.disabled = true; btn.textContent = 'Membuka...';
+  try {
+    const selCabang = document.getElementById('open-branch');
+    const branchId = cabangBoleh.length === 1 ? cabangBoleh[0].id : (selCabang ? parseInt(selCabang.value) : null);
+    if (!branchId) { showToast('Pilih cabang terlebih dahulu','warning'); btn.disabled = false; btn.textContent = '🔓 Buka Kasir & Mulai Berjualan'; return; }
+    const r = await API.post('/cashier/open', { opening_balance: Number(v), branch_id: branchId, notes: document.getElementById('open-notes').value.trim() });
+    if (typeof playTone === 'function') playTone('success', 0.2);
+    showToast('Kasir dibuka — ' + r.session_code + ' ✅','success');
+    refresh();
+  } catch(e) { showToast(e.message,'error'); btn.disabled = false; btn.textContent = '🔓 Buka Kasir & Mulai Berjualan'; }
+}
+
+/* ---------------- SEDANG BUKA ---------------- */
+function renderOpen(el) {
+  const s = session.summary;
+  document.getElementById('shift-sub').textContent =
+    `${session.session_code} · dibuka ${fmt.dateTime(session.opened_at)}`;
+
+  el.innerHTML = `
+  <div class="stat-row">
+    <div class="stat-box"><div class="lbl">Saldo Awal</div><div class="val">${rp(s.opening_balance)}</div></div>
+    <div class="stat-box"><div class="lbl">Transaksi</div><div class="val">${s.transactions}</div></div>
+    <div class="stat-box"><div class="lbl">Porsi Terjual</div><div class="val">${s.total_porsi}</div></div>
+    <div class="stat-box hi"><div class="lbl">Uang di Laci (seharusnya)</div><div class="val">${rp(s.expected_cash)}</div></div>
+  </div>
+
+  <div class="shift-wrap">
+    <div>
+      <!-- Per metode pembayaran -->
+      <div class="card mb-4">
+        <div class="card-header"><span class="card-title">💳 Penerimaan per Metode Pembayaran</span>
+          <span style="margin-left:auto;font-weight:800">${rp(s.sales_total)}</span></div>
+        <div class="card-body">
+          ${session.by_method.length ? session.by_method.map(m => `
+            <div class="method-row">
+              <div class="ic">${esc(m.icon)}</div>
+              <div class="nm"><b>${esc(m.name)} ${m.counted_in_drawer?'<span class="drawer-pill">MASUK LACI</span>':''}</b>
+                <small>${m.transactions} transaksi</small></div>
+              <div class="amt">${rp(m.amount)}</div>
+            </div>`).join('')
+            : '<p class="text-muted" style="text-align:center;padding:20px 0">Belum ada transaksi di shift ini</p>'}
+        </div>
+      </div>
+
+      <!-- Produk terjual -->
+      <div class="card mb-4">
+        <div class="card-header"><span class="card-title">🦐 Rekap Produk Terjual</span>
+          <span style="margin-left:auto;font-weight:800">${s.total_porsi} porsi</span></div>
+        <div class="card-body">
+          ${session.items.length ? session.items.map(i => `
+            <div class="item-line"><span>${esc(i.product_name)}</span>
+              <span><b>${i.qty}</b> <span class="text-muted">${esc(i.unit||'porsi')}</span> &nbsp;·&nbsp; ${rp(i.subtotal)}</span></div>`).join('')
+            : '<p class="text-muted" style="text-align:center;padding:20px 0">Belum ada produk terjual</p>'}
+        </div>
+      </div>
+
+      <!-- Kas keluar/masuk -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">💸 Kas Masuk / Keluar</span>
+          <div style="margin-left:auto;display:flex;gap:6px">
+            <button class="btn btn-secondary btn-sm" data-perm="pos.cash_out" onclick="openMv('in')">＋ Kas Masuk</button>
+            <button class="btn btn-secondary btn-sm" data-perm="pos.cash_out" onclick="openMv('out')">－ Kas Keluar</button>
+          </div></div>
+        <div class="card-body">
+          ${session.movements.length ? session.movements.map(m => `
+            <div class="mv-item">
+              <span style="font-size:17px">${m.type==='out'?'🔻':'🔺'}</span>
+              <div style="flex:1;min-width:0">
+                <b>${esc(m.reason)}</b><br>
+                <small class="text-muted">${esc(m.category||'-')} · ${fmt.time(m.created_at)}${m.reference?' · '+esc(m.reference):''}</small>
+              </div>
+              <span style="font-weight:800;white-space:nowrap;color:${m.type==='out'?'var(--danger)':'var(--success)'}">
+                ${m.type==='out'?'−':'+'}${rp(m.amount)}</span>
+              <button class="btn btn-secondary btn-sm" data-perm="pos.cash_out" onclick="delMv(${m.id})" title="Hapus">🗑️</button>
+            </div>`).join('')
+            : '<p class="text-muted" style="text-align:center;padding:20px 0">Belum ada catatan kas</p>'}
+        </div>
+      </div>
+    </div>
+
+    <!-- Panel tutup kasir -->
+    <div class="card" style="position:sticky;top:80px">
+      <div class="card-header"><span class="card-title">🔒 Tutup Kasir</span></div>
+      <div class="card-body">
+        <div class="calc-line"><span>Saldo awal</span><span>${rp(s.opening_balance)}</span></div>
+        <div class="calc-line"><span>Penjualan tunai <small class="text-muted">(masuk laci)</small></span><span class="pos">+${rp(s.drawer_sales)}</span></div>
+        <div class="calc-line"><span>Kas masuk</span><span class="pos">+${rp(s.cash_in)}</span></div>
+        <div class="calc-line"><span>Kas keluar</span><span class="neg">−${rp(s.cash_out)}</span></div>
+        <div class="calc-line total"><span>Seharusnya ada</span><span>${rp(s.expected_cash)}</span></div>
+        <p style="font-size:11px;color:var(--text-muted);margin:6px 0 14px;line-height:1.55">
+          🔒 Angka ini dihitung otomatis oleh sistem dari data transaksi dan tidak bisa diubah manual.
+        </p>
+
+        <div class="form-group">
+          <label class="form-label">Hitung Uang Fisik di Laci *</label>
+          <input type="number" id="counted" class="form-control big-input" placeholder="0" min="0"
+                 inputmode="numeric" oninput="updateDiff()">
+        </div>
+        <div id="diff-wrap"></div>
+
+        <div class="form-group" style="margin-top:12px">
+          <label class="form-label">Catatan Penutupan</label>
+          <textarea id="close-notes" class="form-control" rows="2" placeholder="mis. selisih karena uang kembalian kurang"></textarea>
+        </div>
+        <button class="btn btn-primary w-100 btn-lg" data-perm="pos.session_close" id="close-btn" onclick="closeShift()">🔒 Tutup Kasir</button>
+        <p style="font-size:11px;color:var(--text-muted);text-align:center;margin:12px 0 0;line-height:1.55">
+          Setelah ditutup, transaksi baru butuh Buka Kasir lagi.
+        </p>
+      </div>
+    </div>
+  </div>`;
+  applyPermissionsToDom();
+  updateDiff();
+}
+
+function updateDiff() {
+  const inp = document.getElementById('counted');
+  const wrap = document.getElementById('diff-wrap');
+  if (!inp || !wrap) return;
+  if (inp.value === '') { wrap.innerHTML = ''; return; }
+  const diff = Number(inp.value) - session.summary.expected_cash;
+  const cls = diff === 0 ? 'ok' : (diff < 0 ? 'short' : 'over');
+  const label = diff === 0 ? '✅ PAS — TIDAK ADA SELISIH' : (diff < 0 ? '⚠️ KURANG' : 'ℹ️ LEBIH');
+  wrap.innerHTML = `<div class="diff-box ${cls}"><div class="t">${label}</div>
+    ${diff!==0?`<div class="v">${rp(Math.abs(diff))}</div>`:''}</div>`;
+}
+
+async function closeShift() {
+  const v = document.getElementById('counted').value;
+  if (v === '' || isNaN(v) || Number(v) < 0) return showToast('Isi dulu hasil hitung uang fisik di laci','warning');
+  const diff = Number(v) - session.summary.expected_cash;
+  const msg = diff === 0
+    ? 'Uang fisik <b>pas</b> dengan hitungan sistem.<br>Tutup kasir sekarang?'
+    : `Terdapat selisih <b>${rp(Math.abs(diff))}</b> (${diff<0?'kurang':'lebih'}).<br>Tetap tutup kasir?`;
+  confirmDialog(msg, async () => {
+    const btn = document.getElementById('close-btn'); btn.disabled = true; btn.textContent = 'Menutup...';
+    try {
+      // Hanya counted_cash yang dikirim — nilai "seharusnya" dihitung server
+      const r = await API.post(`/cashier/${session.id}/close`, {
+        counted_cash: Number(v),
+        notes: document.getElementById('close-notes').value.trim()
+      });
+      if (typeof playTone === 'function') playTone('success', 0.2);
+      showToast('Kasir berhasil ditutup ✅','success');
+      setTimeout(()=>{ window.location.href = '/shift-reports.html?id=' + session.id; }, 900);
+    } catch(e) {
+      showToast(e.message,'error');
+      btn.disabled = false; btn.textContent = '🔒 Tutup Kasir';
+    }
+  }, 'Konfirmasi Tutup Kasir');
+}
+
+/* ---------------- Kas masuk/keluar ---------------- */
+function openMv(type) {
+  mvType = type;
+  document.getElementById('mv-title').textContent = type==='out' ? '🔻 Kas Keluar' : '🔺 Kas Masuk';
+  document.getElementById('mv-amount').value = '';
+  document.getElementById('mv-reason').value = '';
+  document.getElementById('mv-ref').value = '';
+  openModal('mv-modal');
+  setTimeout(()=>document.getElementById('mv-amount').focus(), 120);
+}
+
+async function saveMovement() {
+  const amount = Number(document.getElementById('mv-amount').value);
+  const reason = document.getElementById('mv-reason').value.trim();
+  if (!amount || amount <= 0) return showToast('Nominal harus lebih dari nol','warning');
+  if (!reason) return showToast('Keterangan wajib diisi','warning');
+  const btn = document.getElementById('mv-save'); btn.disabled = true;
+  try {
+    await API.post(`/cashier/${session.id}/movement`, {
+      type: mvType, amount, reason,
+      category: document.getElementById('mv-cat').value,
+      reference: document.getElementById('mv-ref').value.trim(),
+    });
+    showToast(mvType==='out' ? 'Kas keluar dicatat' : 'Kas masuk dicatat','success');
+    closeModal('mv-modal'); refresh();
+  } catch(e) { showToast(e.message,'error'); }
+  btn.disabled = false;
+}
+
+function delMv(id) {
+  confirmDialog('Hapus catatan kas ini?', async () => {
+    try { await API.delete(`/cashier/${session.id}/movement/${id}`); showToast('Catatan kas dihapus','success'); refresh(); }
+    catch(e) { showToast(e.message,'error'); }
+  }, 'Hapus Catatan Kas');
+}
+
+if (PAGE_OK) {
+  refresh();
+  setInterval(() => { if (session && !document.querySelector('.modal-overlay.show')) refresh(); }, 45000);
+}
+</script>
+</body>
+</html>

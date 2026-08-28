@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kasir — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Kasir</div><div class="role" id="user-role">Kasir</div></div><span onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:20px;color:var(--sidebar-text)" title="Keluar">🚪</span></div></div></aside>
+<div id="main-content">
+  <div class="top-bar">
+    <div>
+      <div class="page-title" id="page-title">Selamat Datang! 👋</div>
+      <div class="page-subtitle" id="page-subtitle"></div>
+    </div>
+    <div class="top-bar-actions">
+      <a href="/pos.html" class="btn btn-primary" style="font-size:16px;padding:10px 24px">🛒 Buka Kasir</a>
+    </div>
+  </div>
+  <div class="page-content">
+    <div class="grid-3 mb-4" id="kasir-kpi"></div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header"><span class="card-title">🦐 Stok Produk Cabang Saya</span></div>
+        <div class="card-body" id="stok-info" style="text-align:center;padding:24px">
+          <div id="stok-number" style="font-size:72px;font-weight:900;line-height:1">—</div>
+          <div style="font-size:16px;color:var(--text-secondary);margin:8px 0">porsi tersedia</div>
+          <div id="stok-status" style="margin:12px 0"></div>
+          <button class="btn btn-primary" onclick="openProduksiFromHome()">🦐 Catat Produksi</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">💰 Penjualan Hari Ini</span></div>
+        <div class="card-body" id="today-sales" style="padding:16px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Produksi (mini) -->
+<div class="modal-overlay" id="produksi-home-modal">
+  <div class="modal-box" style="max-width:340px">
+    <div class="modal-header"><span class="modal-title">📦 Catat Produksi Stok</span><button class="modal-close" onclick="closeModal('produksi-home-modal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Jumlah yang Diproduksi</label>
+        <input type="number" id="home-prod-qty" class="form-control font-mono" placeholder="0" min="1" style="font-size:28px;font-weight:800;text-align:center">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Catatan</label>
+        <input type="text" id="home-prod-notes" class="form-control" placeholder="Contoh: Produksi pagi">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('produksi-home-modal')">Batal</button>
+      <button class="btn btn-primary" id="home-prod-btn" onclick="saveProduksiHome()">✅ Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+const user = Auth.getUser();
+Auth.requireAuth();
+setupSidebar('pos');  // highlight POS since this is kasir landing
+
+document.getElementById('page-title').textContent = 'Halo, ' + (user?.full_name||'Kasir') + '! 👋';
+document.getElementById('page-subtitle').textContent = 'Cabang: ' + (user?.branch_name||'') + ' · ' + new Date().toLocaleDateString('id-ID',{timeZone:'Asia/Jakarta',weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+
+async function loadKasirHome() {
+  try {
+    // Load stok item termonitor di cabang kasir
+    const r = await API.get('/stock/products?branch_id='+user?.branch_id);
+    const items = r.stocks || [];
+    const totalStock = items.reduce((s,x)=>s+(x.current_stock||0),0);
+    const habis = items.filter(x=>x.current_stock<=0).length;
+    const menipis = items.filter(x=>x.current_stock>0 && x.current_stock<=x.min_stock).length;
+    const lvl = habis>0?'danger':menipis>0?'warning':'success';
+    const status = habis>0?`🔴 ${habis} ITEM HABIS`:menipis>0?`🟡 ${menipis} MENIPIS`:'🟢 AMAN';
+    document.getElementById('stok-number').textContent = totalStock;
+    document.getElementById('stok-number').style.color = `var(--${lvl})`;
+    document.getElementById('stok-status').innerHTML = `<span style="background:var(--${lvl});color:white;padding:6px 20px;border-radius:20px;font-weight:700;font-size:14px">${status}</span>`;
+
+    // Today's sales
+    const today = getToday();
+    const sales = await API.get(`/sales?start_date=${today}&end_date=${today}&limit=200`);
+    const allS = sales.sales||[];
+    const totalRev = allS.reduce((s,x)=>s+x.total,0);
+    const cash = allS.filter(x=>x.payment_method==='cash').reduce((s,x)=>s+x.total,0);
+    const tf = allS.filter(x=>x.payment_method==='transfer').reduce((s,x)=>s+x.total,0);
+    const qris = allS.filter(x=>x.payment_method==='qris').reduce((s,x)=>s+x.total,0);
+
+    document.getElementById('kasir-kpi').innerHTML = `
+      <div class="kpi-card primary"><div class="kpi-icon">💰</div><div class="kpi-label">Pendapatan Hari Ini</div><div class="kpi-value large">${fmt.currency(totalRev)}</div><div class="kpi-change">${allS.length} transaksi</div></div>
+      <div class="kpi-card success"><div class="kpi-icon">💵</div><div class="kpi-label">Cash</div><div class="kpi-value large">${fmt.currency(cash)}</div></div>
+      <div class="kpi-card warning"><div class="kpi-icon">🏦</div><div class="kpi-label">Transfer + QRIS</div><div class="kpi-value large">${fmt.currency(tf+qris)}</div></div>
+    `;
+
+    // Last 5 transactions
+    const last5 = allS.slice(0,5);
+    const PM = {cash:'Cash',transfer:'Transfer',qris:'QRIS'};
+    document.getElementById('today-sales').innerHTML = last5.length ? `
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:10px">5 transaksi terakhir hari ini:</div>
+      ${last5.map(s=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <div><div class="font-mono" style="font-size:11px;color:var(--text-muted)">${s.invoice_number}</div><div style="color:var(--text-muted);font-size:11px">${fmt.dateTime(s.created_at)} · ${PM[s.payment_method]||s.payment_method}</div></div>
+        <div class="fw-bold">${fmt.currency(s.total)}</div>
+      </div>`).join('')}
+      <div style="text-align:center;margin-top:12px"><a href="/sales.html" class="btn btn-secondary btn-sm">Lihat Semua →</a></div>
+    ` : '<div class="empty-state" style="padding:20px"><div class="empty-icon">💰</div><p>Belum ada transaksi hari ini</p><a href="/pos.html" class="btn btn-primary" style="margin-top:8px">Mulai Transaksi</a></div>';
+  } catch(e) { console.error(e); }
+}
+
+function openProduksiFromHome() {
+  // Fitur produksi lama (mochi single-counter) sudah tidak dipakai — arahkan ke halaman stok
+  window.location.href = '/pos.html';
+}
+
+async function saveProduksiHome() {
+  // Deprecated — modal produksi mochi tidak lagi digunakan
+  closeModal('produksi-home-modal');
+}
+
+loadKasirHome();
+</script>
+</body>
+</html>

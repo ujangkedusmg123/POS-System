@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Laporan Kasir — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.filter-bar { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px; }
+.filter-bar .form-group { margin-bottom:0; flex:1; min-width:140px; }
+.diff-badge { font-weight:700; font-size:12px; padding:3px 9px; border-radius:20px; white-space:nowrap; }
+.diff-badge.ok { background:#ecfdf5; color:#047857; }
+.diff-badge.short { background:#fef2f2; color:#b91c1c; }
+.diff-badge.over { background:#fffbeb; color:#b45309; }
+.diff-badge.open { background:#eff6ff; color:#1d4ed8; }
+.detail-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:11px; margin-bottom:16px; }
+.detail-box { background:var(--bg-light); border-radius:10px; padding:11px 13px; }
+.detail-box .l { font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.3px; }
+.detail-box .v { font-size:17px; font-weight:800; margin-top:3px; font-variant-numeric:tabular-nums; }
+.calc-line { display:flex; justify-content:space-between; padding:7px 0; font-size:13.5px; font-variant-numeric:tabular-nums; }
+.calc-line.total { border-top:2px solid var(--text-primary); font-weight:800; font-size:16px; padding-top:10px; margin-top:4px; }
+.sec-title { font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--text-muted); margin:20px 0 9px; }
+.mini-row { display:flex; justify-content:space-between; gap:10px; padding:7px 0; border-bottom:1px dashed var(--border); font-size:13px; }
+.mini-row:last-child { border-bottom:0; }
+@media (max-width:768px){ .hide-sm{display:none} }
+</style>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">📋 Laporan Buka / Tutup Kasir</div><div class="page-subtitle">Riwayat shift & rekonsiliasi kas</div></div>
+    <div class="top-bar-actions">
+      <button class="btn btn-secondary" onclick="exportExcel(this)">📗 Excel</button>
+      <a class="btn btn-primary" href="/kasir-shift.html" data-perm="pos.session_open">🔐 Kasir Saya</a>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="card mb-4"><div class="card-body">
+      <div class="filter-bar">
+        <div class="form-group"><label class="form-label">Dari</label><input type="date" id="f-start" class="form-control"></div>
+        <div class="form-group"><label class="form-label">Sampai</label><input type="date" id="f-end" class="form-control"></div>
+        <div class="form-group"><label class="form-label">Status</label>
+          <select id="f-status" class="form-control"><option value="">Semua</option><option value="open">Terbuka</option><option value="closed">Ditutup</option></select></div>
+        <button class="btn btn-primary" onclick="load()">🔍 Terapkan</button>
+      </div>
+    </div></div>
+
+    <div class="stat-row" id="totals" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px"></div>
+
+    <div class="card"><div class="table-wrapper">
+      <table class="table" id="shift-table">
+        <thead><tr>
+          <th>Kode Shift</th><th>Kasir</th><th class="hide-sm">Cabang</th>
+          <th>Dibuka</th><th class="hide-sm">Ditutup</th>
+          <th style="text-align:right">Penjualan</th>
+          <th style="text-align:right" class="hide-sm">Kas Keluar</th>
+          <th style="text-align:right">Selisih</th><th data-nosort="true"></th>
+        </tr></thead>
+        <tbody id="shift-body"></tbody>
+      </table>
+    </div></div>
+  </div>
+</div>
+
+<!-- Modal detail -->
+<div class="modal-overlay" id="detail-modal">
+  <div class="modal-box" style="max-width:700px">
+    <div class="modal-header"><span class="modal-title" id="d-title">Detail Shift</span>
+      <span onclick="closeModal('detail-modal')" style="cursor:pointer;font-size:20px;margin-left:auto">✕</span></div>
+    <div class="modal-body" id="d-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('detail-modal')">Tutup</button>
+      <button class="btn btn-secondary" onclick="downloadShift()">⬇️ Unduh (A4)</button>
+      <button class="btn btn-primary" onclick="printShift()">🖨️ Cetak A4 / PDF</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+/* CATATAN PENTING — jangan bungkus ulang script ini dengan `if (...) { ... }`.
+   Deklarasi `async function` di dalam sebuah blok TIDAK terangkat ke scope
+   global (berbeda dengan `function` biasa yang terangkat lewat aturan warisan
+   Annex B). Kalau seluruh script dibungkus blok, atribut onclick pada tombol
+   tidak menemukan handler async-nya dan seluruh tombol menjadi mati.
+   Karena itu isi script berada di scope global, dan hanya baris bootstrap di
+   bagian bawah yang dijaga oleh PAGE_OK. */
+const PAGE_OK = initPage('shift-reports','Laporan Kasir','Riwayat buka/tutup kasir');
+
+
+let sessions = [], current = null;
+const rp = n => 'Rp ' + Math.round(Number(n)||0).toLocaleString('id-ID');
+const esc = v => String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+document.getElementById('f-start').value = daysAgoLocal(30);
+document.getElementById('f-end').value = getToday();
+
+async function load() {
+  const q = new URLSearchParams();
+  const s = document.getElementById('f-start').value, e = document.getElementById('f-end').value;
+  if (s) q.set('start_date', s); if (e) q.set('end_date', e);
+  const st = document.getElementById('f-status').value; if (st) q.set('status', st);
+  try {
+    sessions = await API.get('/cashier/sessions?' + q.toString());
+    render();
+  } catch(err) { showToast(err.message,'error'); }
+}
+
+function diffBadge(s) {
+  if (s.status === 'open') return '<span class="diff-badge open">TERBUKA</span>';
+  const d = s.difference || 0;
+  if (d === 0) return '<span class="diff-badge ok">PAS</span>';
+  return `<span class="diff-badge ${d<0?'short':'over'}">${d<0?'−':'+'}${rp(Math.abs(d))}</span>`;
+}
+
+function render() {
+  const closed = sessions.filter(s => s.status === 'closed');
+  const totSales = sessions.reduce((a,s)=>a+(s.sales_total||0),0);
+  const totOut = sessions.reduce((a,s)=>a+(s.cash_out||0),0);
+  const totDiff = closed.reduce((a,s)=>a+(s.difference||0),0);
+  const nShort = closed.filter(s=>(s.difference||0)<0).length;
+
+  document.getElementById('totals').innerHTML = `
+    <div class="detail-box"><div class="l">Jumlah Shift</div><div class="v">${sessions.length}</div></div>
+    <div class="detail-box"><div class="l">Total Penjualan</div><div class="v">${rp(totSales)}</div></div>
+    <div class="detail-box"><div class="l">Total Kas Keluar</div><div class="v">${rp(totOut)}</div></div>
+    <div class="detail-box"><div class="l">Akumulasi Selisih</div><div class="v" style="color:${totDiff<0?'var(--danger)':totDiff>0?'var(--warning,#b45309)':'var(--success)'}">${totDiff>0?'+':''}${rp(totDiff)}</div></div>
+    <div class="detail-box"><div class="l">Shift Selisih Kurang</div><div class="v">${nShort}</div></div>`;
+
+  document.getElementById('shift-body').innerHTML = sessions.map(s => `<tr>
+    <td><b class="font-mono">${esc(s.session_code)}</b></td>
+    <td>${esc(s.cashier_name||'-')}</td>
+    <td class="hide-sm" style="font-size:12px">${esc(s.branch_name||'-')}</td>
+    <td style="font-size:12px" data-sort-value="${s.opened_at||''}">${fmt.dateTime(s.opened_at)}</td>
+    <td class="hide-sm" style="font-size:12px">${s.closed_at?fmt.dateTime(s.closed_at):'—'}</td>
+    <td style="text-align:right;white-space:nowrap" data-sort-value="${s.sales_total||0}">${rp(s.sales_total)}<br>
+      <small class="text-muted">${s.trx_count||0} trx</small></td>
+    <td class="hide-sm" style="text-align:right;white-space:nowrap" data-sort-value="${s.cash_out||0}">${rp(s.cash_out)}</td>
+    <td style="text-align:right">${diffBadge(s)}</td>
+    <td><button class="btn btn-sm btn-secondary" onclick="showDetail(${s.id})">Detail</button></td>
+  </tr>`).join('') || '<tr><td colspan="9" class="text-center text-muted" style="padding:32px">Belum ada data shift pada rentang ini</td></tr>';
+
+  if (window.makeSortable) makeSortable(document.getElementById('shift-table'));
+}
+
+async function showDetail(id) {
+  try {
+    current = await API.get('/cashier/sessions/' + id);
+    const s = current.summary;
+    document.getElementById('d-title').textContent = 'Shift ' + current.session_code;
+    const d = current.difference || 0;
+    const isOpen = current.status === 'open';
+
+    document.getElementById('d-body').innerHTML = `
+      <div class="detail-grid">
+        <div class="detail-box"><div class="l">Kasir</div><div class="v" style="font-size:14px">${esc(current.cashier_name||'-')}</div></div>
+        <div class="detail-box"><div class="l">Cabang</div><div class="v" style="font-size:14px">${esc(current.branch_name||'-')}</div></div>
+        <div class="detail-box"><div class="l">Dibuka</div><div class="v" style="font-size:13px">${fmt.dateTime(current.opened_at)}</div></div>
+        <div class="detail-box"><div class="l">Ditutup</div><div class="v" style="font-size:13px">${current.closed_at?fmt.dateTime(current.closed_at):'—'}</div></div>
+      </div>
+
+      <div class="sec-title">Rekonsiliasi Kas</div>
+      <div class="calc-line"><span>Saldo awal</span><span>${rp(s.opening_balance)}</span></div>
+      <div class="calc-line"><span>Penjualan masuk laci</span><span style="color:var(--success)">+${rp(s.drawer_sales)}</span></div>
+      <div class="calc-line"><span>Kas masuk</span><span style="color:var(--success)">+${rp(s.cash_in)}</span></div>
+      <div class="calc-line"><span>Kas keluar</span><span style="color:var(--danger)">−${rp(s.cash_out)}</span></div>
+      <div class="calc-line total"><span>Seharusnya (sistem)</span><span>${rp(s.expected_cash)}</span></div>
+      ${!isOpen ? `
+      <div class="calc-line"><span>Dihitung fisik</span><span>${rp(s.counted_cash)}</span></div>
+      <div class="calc-line total"><span>Selisih</span>
+        <span style="color:${d<0?'var(--danger)':d>0?'#b45309':'var(--success)'}">${d>0?'+':''}${rp(d)}</span></div>` :
+      '<p style="font-size:12px;color:var(--text-muted);margin-top:8px">Shift masih terbuka — angka dihitung real-time.</p>'}
+
+      <div class="sec-title">Penerimaan per Metode Pembayaran</div>
+      ${current.by_method.length ? current.by_method.map(m=>`
+        <div class="mini-row"><span>${esc(m.icon)} ${esc(m.name)} ${m.counted_in_drawer?'<small style="color:#047857">(laci)</small>':''}
+          <small class="text-muted">· ${m.transactions} trx</small></span>
+          <b>${rp(m.amount)}</b></div>`).join('')
+        : '<p class="text-muted" style="font-size:13px">Tidak ada transaksi</p>'}
+      <div class="mini-row" style="border-top:2px solid var(--border);font-weight:800"><span>TOTAL PENJUALAN</span><span>${rp(s.sales_total)}</span></div>
+
+      <div class="sec-title">Produk / Porsi Terjual (${s.total_porsi} porsi)</div>
+      ${current.items.length ? current.items.map(i=>`
+        <div class="mini-row"><span>${esc(i.product_name)}</span>
+          <span><b>${i.qty}</b> ${esc(i.unit||'porsi')} · ${rp(i.subtotal)}</span></div>`).join('')
+        : '<p class="text-muted" style="font-size:13px">Tidak ada produk terjual</p>'}
+
+      <div class="sec-title">Kas Masuk / Keluar</div>
+      ${current.movements.length ? current.movements.map(m=>`
+        <div class="mini-row"><span>${m.type==='out'?'🔻':'🔺'} ${esc(m.reason)}
+          <small class="text-muted">· ${esc(m.category||'-')} · ${fmt.time(m.created_at)}</small></span>
+          <b style="color:${m.type==='out'?'var(--danger)':'var(--success)'}">${m.type==='out'?'−':'+'}${rp(m.amount)}</b></div>`).join('')
+        : '<p class="text-muted" style="font-size:13px">Tidak ada mutasi kas</p>'}
+
+      ${s.cancelled_count > 0 ? `<div class="sec-title">Transaksi Dibatalkan</div>
+        <div class="mini-row"><span>${s.cancelled_count} transaksi dibatalkan</span><b>${rp(s.cancelled_total)}</b></div>` : ''}
+
+      ${current.opening_notes ? `<div class="sec-title">Catatan Buka</div><p style="font-size:13px">${esc(current.opening_notes)}</p>` : ''}
+      ${current.closing_notes ? `<div class="sec-title">Catatan Tutup</div><p style="font-size:13px">${esc(current.closing_notes)}</p>` : ''}`;
+
+    openModal('detail-modal');
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+/**
+ * Laporan Tutup Kasir dicetak sebagai DOKUMEN A4, bukan struk thermal.
+ * Versi lama memakai lebar 72mm + font Courier + @page 80mm, sehingga hasil
+ * cetaknya tidak terbaca di kertas A4. Format thermal kini khusus untuk struk
+ * pelanggan di POS saja.
+ */
+function buildShiftDoc() {
+  const s = current.summary;
+  const d = current.difference || 0;
+  const kv = (l, v, cls) => `<div class="kv ${cls||''}"><span>${l}</span><span class="v">${v}</span></div>`;
+
+  const metode = current.by_method.length
+    ? `<table>
+         <thead><tr><th>Metode Pembayaran</th><th class="num">Transaksi</th><th class="num">Jumlah</th></tr></thead>
+         <tbody>${current.by_method.map(m => `<tr>
+           <td>${esc(m.name)}${m.affects_drawer ? ' <small>(masuk laci)</small>' : ''}</td>
+           <td class="num">${m.transactions}</td>
+           <td class="num">${rp(m.amount)}</td></tr>`).join('')}
+           <tr class="total"><td>TOTAL PENJUALAN</td><td class="num">${s.transactions}</td><td class="num">${rp(s.sales_total)}</td></tr>
+         </tbody>
+       </table>`
+    : '<p class="note">Belum ada transaksi pada shift ini.</p>';
+
+  const produk = current.items.length
+    ? `<table>
+         <thead><tr><th>Produk</th><th class="num">Jumlah</th></tr></thead>
+         <tbody>${current.items.map(i => `<tr><td>${esc(i.product_name)}</td>
+           <td class="num">${i.qty} ${esc(i.unit || 'porsi')}</td></tr>`).join('')}
+           <tr class="total"><td>TOTAL PORSI</td><td class="num">${s.total_porsi}</td></tr>
+         </tbody>
+       </table>`
+    : '<p class="note">Tidak ada produk terjual.</p>';
+
+  const mutasi = current.movements.length
+    ? `<table>
+         <thead><tr><th>Waktu</th><th>Jenis</th><th>Keterangan</th><th class="num">Jumlah</th></tr></thead>
+         <tbody>${current.movements.map(m => `<tr>
+           <td>${fmt.time(m.created_at)}</td>
+           <td>${m.type === 'out' ? 'Kas Keluar' : 'Kas Masuk'}</td>
+           <td>${esc(m.reason || '-')}</td>
+           <td class="num">${m.type === 'out' ? '-' : '+'}${rp(m.amount)}</td></tr>`).join('')}
+         </tbody>
+       </table>`
+    : '<p class="note">Tidak ada mutasi kas selama shift.</p>';
+
+  const rekon = `
+    ${kv('Saldo awal laci', rp(s.opening_balance))}
+    ${kv('Penjualan tunai (masuk laci)', '+ ' + rp(s.drawer_sales))}
+    ${kv('Kas masuk', '+ ' + rp(s.cash_in))}
+    ${kv('Kas keluar', '- ' + rp(s.cash_out))}
+    ${kv('<b>SALDO SEHARUSNYA</b>', '<b>' + rp(s.expected_cash) + '</b>', 'total')}
+    ${current.status === 'closed' ? kv('Fisik dihitung kasir', rp(s.counted_cash)) : ''}
+    ${current.status === 'closed' ? kv('<b>SELISIH</b>', '<b>' + (d > 0 ? '+' : '') + rp(d) + '</b>', 'total') : ''}`;
+
+  const body = `
+    <h3 class="sec">Penerimaan per Metode Pembayaran</h3>
+    ${metode}
+    <div class="cols">
+      <div><h3 class="sec">Rekonsiliasi Kas</h3>${rekon}</div>
+      <div><h3 class="sec">Produk Terjual</h3>${produk}</div>
+    </div>
+    <h3 class="sec">Mutasi Kas</h3>
+    ${mutasi}
+    ${current.opening_notes ? `<h3 class="sec">Catatan Buka</h3><p class="note">${esc(current.opening_notes)}</p>` : ''}
+    ${current.closing_notes ? `<h3 class="sec">Catatan Tutup</h3><p class="note">${esc(current.closing_notes)}</p>` : ''}
+    <div class="sign-row">
+      <div class="sign"><div>Kasir</div><div class="line">${esc(current.cashier_name || '')}</div></div>
+      <div class="sign"><div>Diketahui / Supervisor</div><div class="line">&nbsp;</div></div>
+    </div>`;
+
+  return {
+    title: 'Laporan Tutup Kasir',
+    subtitle: esc(current.session_code),
+    meta: [
+      ['Kode Shift', current.session_code],
+      ['Kasir', current.cashier_name || '-'],
+      ['Cabang', current.branch_name || '-'],
+      ['Status', current.status === 'closed' ? 'Ditutup' : 'Masih Terbuka'],
+      ['Dibuka', fmt.dateTime(current.opened_at)],
+      ['Ditutup', current.closed_at ? fmt.dateTime(current.closed_at) : '-'],
+    ],
+    body,
+  };
+}
+
+function printShift() {
+  if (!current) return;
+  printA4Document(buildShiftDoc());
+}
+
+function downloadShift() {
+  if (!current) return;
+  downloadA4Document(buildShiftDoc(), 'laporan-kasir-' + (current.session_code || 'shift') + '.html');
+}
+
+function exportExcel(btn) {
+  if (!sessions.length) return showToast('Belum ada data untuk diekspor','warning');
+  downloadExcel({
+    filename: 'laporan-kasir-' + getToday(),
+    sheets: [{
+      name: 'Laporan Kasir',
+      title: 'Laporan Buka / Tutup Kasir \u2014 Ujang Kedu',
+      meta: excelMeta([['Jumlah shift', sessions.length]]),
+      columns: [
+        { header:'Kode Shift', key:'kode', width:20 },
+        { header:'Kasir', key:'kasir' },
+        { header:'Cabang', key:'cabang' },
+        { header:'Dibuka', key:'buka', type:'datetime' },
+        { header:'Ditutup', key:'tutup', type:'datetime' },
+        { header:'Status', key:'status' },
+        { header:'Saldo Awal (Rp)', key:'awal', type:'money' },
+        { header:'Transaksi', key:'trx', type:'number' },
+        { header:'Penjualan (Rp)', key:'jual', type:'money' },
+        { header:'Kas Keluar (Rp)', key:'keluar', type:'money' },
+        { header:'Seharusnya (Rp)', key:'harus', type:'money' },
+        { header:'Fisik (Rp)', key:'fisik', type:'money' },
+        { header:'Selisih (Rp)', key:'selisih', type:'money' },
+      ],
+      rows: sessions.map(s => ({
+        kode:s.session_code, kasir:s.cashier_name||'-', cabang:s.branch_name||'-',
+        buka:s.opened_at, tutup:s.closed_at, status:s.status==='open'?'Masih terbuka':'Ditutup',
+        awal:s.opening_balance||0, trx:s.trx_count||0, jual:s.sales_total||0, keluar:s.cash_out||0,
+        harus:s.expected_cash, fisik:s.counted_cash, selisih:s.difference,
+      })),
+      totals: {
+        kode:'TOTAL', trx: sessions.reduce((a,s)=>a+(s.trx_count||0),0),
+        jual: sessions.reduce((a,s)=>a+(s.sales_total||0),0),
+        keluar: sessions.reduce((a,s)=>a+(s.cash_out||0),0),
+        selisih: sessions.reduce((a,s)=>a+(s.difference||0),0),
+      },
+    }],
+  }, btn);
+}
+
+if (PAGE_OK) {
+  load().then(() => {
+    // Buka detail otomatis kalau datang dari halaman tutup kasir
+    const id = new URLSearchParams(location.search).get('id');
+    if (id) showDetail(id);
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bahan Baku — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">🥣 Bahan Baku</div><div class="page-subtitle">Pantau dan kelola stok bahan baku produksi</div></div>
+    <div class="top-bar-actions">
+      <button class="btn btn-primary" onclick="openRefillModal()">📦 Catat Refill</button>
+      <button class="btn btn-secondary" onclick="openAddBahanModal()">➕ Tambah Bahan</button>
+    </div>
+  </div>
+  <div class="page-content">
+    <div class="grid-4 mb-4" id="bahan-kpi"></div>
+    <div class="grid-2 mb-4">
+      <!-- Daftar bahan -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">📦 Stok Bahan Baku</span></div>
+        <div id="bahan-list"></div>
+      </div>
+      <!-- Log -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">📜 Riwayat Pergerakan</span><button class="btn btn-secondary btn-sm" onclick="loadLog()">🔄</button></div>
+        <div class="table-wrapper" style="max-height:420px;overflow-y:auto">
+          <table class="table" style="font-size:12px">
+            <thead><tr><th>Waktu</th><th>Bahan</th><th>Tipe</th><th>Qty</th><th>Stok</th><th>Ket.</th></tr></thead>
+            <tbody id="bahan-log-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Refill -->
+<div class="modal-overlay" id="refill-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title">📦 Catat Refill Bahan Baku</span><button class="modal-close" onclick="closeModal('refill-modal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Bahan Baku *</label>
+        <select id="r-material" class="form-control" onchange="updateRefillUnit()"><option value="">-- Pilih Bahan --</option></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Jumlah yang Ditambahkan *</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="number" id="r-qty" class="form-control font-mono" placeholder="0" min="0.1" step="0.1" style="font-size:22px;font-weight:800;text-align:center;flex:1" oninput="updateRefillPreview()">
+          <span id="r-unit-label" style="font-size:14px;font-weight:700;color:var(--text-muted);min-width:50px">kg</span>
+        </div>
+      </div>
+      <div id="r-preview" style="background:var(--bg-light);border-radius:8px;padding:12px;text-align:center;display:none;margin-bottom:12px">
+        <div style="font-size:12px;color:var(--text-muted)">Stok setelah refill:</div>
+        <div id="r-after" style="font-size:32px;font-weight:900;color:var(--success)">—</div>
+      </div>
+      <div class="form-group"><label class="form-label">Catatan</label>
+        <input type="text" id="r-notes" class="form-control" placeholder="Contoh: Beli di pasar, harga Rp X/kg">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('refill-modal')">Batal</button>
+      <button class="btn btn-primary" id="refill-save-btn" onclick="saveRefill()">✅ Simpan Refill</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Tambah / Edit Bahan -->
+<div class="modal-overlay" id="bahan-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title" id="bahan-modal-title">Tambah Bahan Baku</span><button class="modal-close" onclick="closeModal('bahan-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="bahan-edit-id">
+      <div class="form-group"><label class="form-label">Nama Bahan *</label>
+        <input type="text" id="b-name" class="form-control" placeholder="Contoh: Tepung Bumbu">
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Satuan *</label>
+          <select id="b-unit" class="form-control">
+            <option value="kg">kg</option>
+            <option value="gram">gram</option>
+            <option value="liter">liter</option>
+            <option value="ml">ml</option>
+            <option value="pcs">pcs</option>
+            <option value="btl">botol</option>
+            <option value="bks">bungkus</option>
+            <option value="roll">roll</option>
+            <option value="lembar">lembar</option>
+            <option value="lusin">lusin</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Stok Minimum (Alert)</label>
+          <input type="number" id="b-min" class="form-control" placeholder="1" min="0" step="0.1">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Catatan</label>
+        <input type="text" id="b-notes" class="form-control" placeholder="Keterangan tambahan (opsional)">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('bahan-modal')">Batal</button>
+      <button class="btn btn-primary" id="save-bahan-btn" onclick="saveBahan()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Pakai / Koreksi -->
+<div class="modal-overlay" id="pakai-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title" id="pakai-title">Catat Penggunaan</span><button class="modal-close" onclick="closeModal('pakai-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="pakai-id"><input type="hidden" id="pakai-type">
+      <div id="pakai-info" style="background:var(--bg-light);border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px"></div>
+      <div class="form-group">
+        <label class="form-label" id="pakai-qty-label">Jumlah *</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="number" id="pakai-qty" class="form-control font-mono" placeholder="0" min="0" step="0.1" style="font-size:22px;font-weight:800;text-align:center;flex:1">
+          <span id="pakai-unit" style="font-size:14px;font-weight:700;color:var(--text-muted);min-width:50px">kg</span>
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">Catatan</label>
+        <input type="text" id="pakai-notes" class="form-control" placeholder="Keterangan">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('pakai-modal')">Batal</button>
+      <button class="btn btn-primary" id="pakai-save-btn" onclick="savePakai()">✅ Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+// Redirect cashier away from admin page
+// Gerbang halaman ditangani initPage() berdasarkan hak akses. Pemeriksaan
+// "harus admin" yang lama dihapus karena menendang keluar peran sah lain
+// (supervisor, tim produksi, runner) yang justru diberi izin untuk halaman ini.
+initPage('bahan','Bahan Baku','Pantau dan kelola stok bahan baku produksi');
+let materials = [];
+
+async function loadAll() {
+  try {
+    const data = await API.get('/bahan');
+    materials = data.materials || [];
+    renderKPI(data);
+    renderList(materials);
+    populateRefillSelect(materials);
+    await loadLog();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+function renderKPI(data) {
+  const m = data.materials||[];
+  const low = data.low_stock_count||0;
+  const habis = m.filter(x=>x.current_stock<=0).length;
+  document.getElementById('bahan-kpi').innerHTML = `
+    <div class="kpi-card primary"><div class="kpi-icon">🥣</div><div class="kpi-label">Total Bahan</div><div class="kpi-value">${m.length}</div></div>
+    <div class="kpi-card success"><div class="kpi-icon">✅</div><div class="kpi-label">Stok Cukup</div><div class="kpi-value">${m.length-low}</div></div>
+    <div class="kpi-card ${low>0?'warning':'secondary'}"><div class="kpi-icon">⚠️</div><div class="kpi-label">Hampir Habis</div><div class="kpi-value">${low}</div></div>
+    <div class="kpi-card ${habis>0?'danger':'secondary'}"><div class="kpi-icon">🔴</div><div class="kpi-label">Stok Habis</div><div class="kpi-value">${habis}</div></div>
+  `;
+}
+
+function fmtStock(v) { return Number.isInteger(v) ? v : v.toFixed(2); }
+
+function renderList(mats) {
+  document.getElementById('bahan-list').innerHTML = mats.map(m => {
+    const pct = m.min_stock>0 ? Math.min(100,(m.current_stock/(m.min_stock*3))*100) : 100;
+    const lvl = m.current_stock<=0?'danger':m.current_stock<=m.min_stock?'warning':'success';
+    return `<div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <div>
+          <div style="font-weight:700;font-size:14px">${m.name}</div>
+          <div style="font-size:11px;color:var(--text-muted)">Satuan: ${m.unit} · Min: ${m.min_stock} ${m.unit}${m.notes?` · ${m.notes}`:''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:20px;font-weight:900;color:var(--${lvl})">${fmtStock(m.current_stock)}</span>
+          <span style="font-size:12px;color:var(--text-muted)">${m.unit}</span>
+          <button class="btn-icon" onclick="openRefillForMaterial(${m.id})" title="Refill" style="color:var(--success)">📦</button>
+          <button class="btn-icon" onclick="openPakaiModal(${m.id},'pakai')" title="Catat Pakai">➖</button>
+          <button class="btn-icon" onclick="openPakaiModal(${m.id},'koreksi')" title="Koreksi Stok">🔧</button>
+          <button class="btn-icon" onclick="openEditBahan(${m.id})" title="Edit Bahan">✏️</button>
+          <button class="btn-icon" onclick="deleteBahan(${m.id},'${m.name.replace(/'/g,"\\'")}',${m.current_stock})" title="Hapus" style="color:var(--danger)">🗑️</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="background:var(--border);border-radius:4px;height:8px;flex:1"><div style="width:${pct.toFixed(0)}%;height:8px;border-radius:4px;background:var(--${lvl})"></div></div>
+        <span style="font-size:11px;color:var(--text-muted)">Min: ${m.min_stock} ${m.unit}</span>
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty-state" style="padding:30px"><div class="empty-icon">🥣</div><p>Belum ada bahan baku</p><span>Klik "+ Tambah Bahan" untuk menambahkan</span></div>';
+}
+
+async function loadLog() {
+  try {
+    const logs = await API.get('/bahan/log?limit=50');
+    const typeLabel={restock:'📦 Refill',pakai:'🍳 Pakai',koreksi:'🔧 Koreksi'};
+    const typeClass={restock:'badge-success',pakai:'badge-primary',koreksi:'badge-warning'};
+    document.getElementById('bahan-log-tbody').innerHTML = logs.map(l=>`<tr>
+      <td style="color:var(--text-muted);white-space:nowrap">${fmt.dateTime(l.created_at)}</td>
+      <td style="font-weight:600">${l.material_name}</td>
+      <td><span class="badge ${typeClass[l.type]||'badge-secondary'}" style="font-size:10px">${typeLabel[l.type]||l.type}</span></td>
+      <td class="fw-bold font-mono ${l.quantity_change>0?'text-success':'text-danger'}">${l.quantity_change>0?'+':''}${fmtStock(l.quantity_change)} ${l.unit}</td>
+      <td class="font-mono">${fmtStock(l.quantity_after)} ${l.unit}</td>
+      <td style="font-size:11px;max-width:120px">${l.notes||'-'}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="text-center text-muted" style="padding:20px">Belum ada riwayat</td></tr>';
+  } catch(e) {}
+}
+
+function populateRefillSelect(mats) {
+  document.getElementById('r-material').innerHTML = '<option value="">-- Pilih Bahan --</option>' +
+    mats.map(m=>`<option value="${m.id}" data-unit="${m.unit}" data-stock="${m.current_stock}">${m.name} (stok: ${fmtStock(m.current_stock)} ${m.unit})</option>`).join('');
+}
+
+function updateRefillUnit() {
+  const sel = document.getElementById('r-material');
+  const opt = sel.options[sel.selectedIndex];
+  document.getElementById('r-unit-label').textContent = opt?.dataset?.unit||'kg';
+  document.getElementById('r-qty').value = '';
+  document.getElementById('r-preview').style.display = 'none';
+}
+
+function updateRefillPreview() {
+  const sel = document.getElementById('r-material');
+  const opt = sel.options[sel.selectedIndex];
+  const qty = parseFloat(document.getElementById('r-qty').value)||0;
+  const cur = parseFloat(opt?.dataset?.stock||0);
+  if (qty>0) { document.getElementById('r-preview').style.display=''; document.getElementById('r-after').textContent=fmtStock(cur+qty); }
+  else document.getElementById('r-preview').style.display='none';
+}
+
+// ====== REFILL ======
+function openRefillModal() {
+  document.getElementById('r-material').value='';
+  document.getElementById('r-qty').value='';
+  document.getElementById('r-notes').value='';
+  document.getElementById('r-unit-label').textContent='kg';
+  document.getElementById('r-preview').style.display='none';
+  openModal('refill-modal');
+}
+
+function openRefillForMaterial(id) {
+  openRefillModal();
+  document.getElementById('r-material').value=id;
+  updateRefillUnit();
+  setTimeout(()=>document.getElementById('r-qty').focus(),300);
+}
+
+async function saveRefill() {
+  const mid=document.getElementById('r-material').value;
+  const qty=parseFloat(document.getElementById('r-qty').value);
+  const notes=document.getElementById('r-notes').value.trim();
+  if (!mid){showToast('Pilih bahan baku','warning');return;}
+  if (!qty||qty<=0){showToast('Jumlah harus lebih dari 0','warning');return;}
+  const btn=document.getElementById('refill-save-btn');btn.disabled=true;
+  try {
+    const res=await API.post('/bahan/'+mid+'/refill',{quantity:qty,notes});
+    showToast(res.message,'success'); closeModal('refill-modal'); await loadAll();
+  } catch(e){showToast(e.message,'error');}
+  btn.disabled=false;
+}
+
+// ====== TAMBAH / EDIT BAHAN ======
+function openAddBahanModal() {
+  document.getElementById('bahan-modal-title').textContent='Tambah Bahan Baku';
+  document.getElementById('bahan-edit-id').value='';
+  document.getElementById('b-name').value='';
+  document.getElementById('b-unit').value='kg';
+  document.getElementById('b-min').value='1';
+  document.getElementById('b-notes').value='';
+  openModal('bahan-modal');
+  setTimeout(()=>document.getElementById('b-name').focus(),300);
+}
+
+function openEditBahan(id) {
+  const m = materials.find(x=>x.id===id); if(!m) return;
+  document.getElementById('bahan-modal-title').textContent='Edit Bahan Baku';
+  document.getElementById('bahan-edit-id').value=m.id;
+  document.getElementById('b-name').value=m.name;
+  document.getElementById('b-unit').value=m.unit||'kg';
+  document.getElementById('b-min').value=m.min_stock;
+  document.getElementById('b-notes').value=m.notes||'';
+  openModal('bahan-modal');
+}
+
+async function saveBahan() {
+  const id=document.getElementById('bahan-edit-id').value;
+  const name=document.getElementById('b-name').value.trim();
+  const unit=document.getElementById('b-unit').value;
+  const min_stock=parseFloat(document.getElementById('b-min').value)||0;
+  const notes=document.getElementById('b-notes').value.trim();
+  if (!name){showToast('Nama bahan wajib diisi','warning');return;}
+  const btn=document.getElementById('save-bahan-btn');btn.disabled=true;
+  try {
+    if (id) await API.put('/bahan/'+id,{name,unit,min_stock,notes});
+    else await API.post('/bahan',{name,unit,min_stock,notes});
+    showToast(id?'Bahan diperbarui':'Bahan ditambahkan','success');
+    closeModal('bahan-modal'); await loadAll();
+  } catch(e){showToast(e.message,'error');}
+  btn.disabled=false;
+}
+
+// ====== PAKAI / KOREKSI ======
+function openPakaiModal(id, type) {
+  const m=materials.find(x=>x.id===id); if(!m) return;
+  document.getElementById('pakai-id').value=id;
+  document.getElementById('pakai-type').value=type;
+  document.getElementById('pakai-unit').textContent=m.unit;
+  document.getElementById('pakai-notes').value='';
+  document.getElementById('pakai-info').innerHTML=`<strong>${m.name}</strong> — Stok saat ini: <strong style="color:var(--primary)">${fmtStock(m.current_stock)} ${m.unit}</strong>`;
+  if (type==='pakai') {
+    document.getElementById('pakai-title').textContent='🍳 Catat Penggunaan';
+    document.getElementById('pakai-qty-label').textContent=`Jumlah yang dipakai (stok: ${fmtStock(m.current_stock)} ${m.unit}) *`;
+    document.getElementById('pakai-qty').value='';
+  } else {
+    document.getElementById('pakai-title').textContent='🔧 Koreksi Stok';
+    document.getElementById('pakai-qty-label').textContent=`Jumlah stok aktual sekarang (${m.unit}) *`;
+    document.getElementById('pakai-qty').value=m.current_stock;
+  }
+  openModal('pakai-modal');
+  setTimeout(()=>document.getElementById('pakai-qty').focus(),300);
+}
+
+async function savePakai() {
+  const id=document.getElementById('pakai-id').value;
+  const type=document.getElementById('pakai-type').value;
+  const qty=parseFloat(document.getElementById('pakai-qty').value);
+  const notes=document.getElementById('pakai-notes').value.trim();
+  if (isNaN(qty)||qty<0){showToast('Jumlah tidak valid','warning');return;}
+  const btn=document.getElementById('pakai-save-btn');btn.disabled=true;
+  try {
+    const ep=type==='koreksi'?'/bahan/'+id+'/koreksi':'/bahan/'+id+'/pakai';
+    const res=await API.post(ep,{quantity:qty,notes});
+    showToast(res.message,'success'); closeModal('pakai-modal'); await loadAll();
+  } catch(e){showToast(e.message,'error');}
+  btn.disabled=false;
+}
+
+// ====== DELETE ======
+async function deleteBahan(id, name, stock) {
+  confirmDialog(
+    `Hapus bahan "<strong>${name}</strong>"?${stock>0?`<br><small style="color:var(--danger)">⚠️ Masih ada stok ${fmtStock(stock)}!</small>`:''}`,
+    async () => {
+      try { await API.delete('/bahan/'+id); showToast('Bahan baku dihapus','success'); await loadAll(); }
+      catch(e){showToast(e.message,'error');}
+    }, 'Hapus Bahan Baku'
+  );
+}
+
+loadAll();
+</script>
+</body>
+</html>

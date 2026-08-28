@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Produk — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<aside id="sidebar">
+  <div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div>
+  <nav class="sidebar-nav" id="sidebar-nav"></nav>
+  <div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user">
+    <div class="avatar" id="user-avatar">A</div>
+    <div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div>
+    <a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a>
+  </div></div>
+</aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">🦐 Produk</div><div class="page-subtitle">Kelola menu dan harga Ujang Kedu</div></div>
+    <div class="top-bar-actions">
+      <div class="search-bar"><span class="search-icon">🔍</span><input type="text" id="search-input" class="form-control" placeholder="Cari produk..." oninput="filterTable()" style="width:200px"></div>
+      <select id="cat-filter" class="form-control" style="width:160px" onchange="filterTable()"><option value="">Semua Kategori</option></select>
+      <button class="btn btn-secondary" onclick="exportExcel(this)">📗 Excel</button>
+      <button class="btn btn-primary" onclick="openAddModal()">+ Tambah Produk</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="grid-4 mb-4" id="product-kpi"></div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">Daftar Produk</span></div>
+      <div class="table-wrapper">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Kode</th>
+              <th>Nama Produk</th>
+              <th>Kategori</th>
+              <th>Harga Jual</th>
+              <th>Satuan</th>
+              <th>Tipe</th>
+              <th>Status</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="product-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="product-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">Tambah Produk</span>
+      <button class="modal-close" onclick="closeModal('product-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-id">
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Kode Produk <span class="required">*</span></label>
+          <input type="text" id="f-code" class="form-control font-mono" placeholder="MG001">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Barcode</label>
+          <input type="text" id="f-barcode" class="form-control font-mono" placeholder="Opsional">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nama Produk <span class="required">*</span></label>
+        <input type="text" id="f-name" class="form-control" placeholder="Contoh: Sweet Gang">
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Kategori</label>
+          <select id="f-category" class="form-control"><option value="">-- Pilih --</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Satuan</label>
+          <select id="f-unit" class="form-control">
+            <option value="porsi">Porsi</option>
+            <option value="pcs">Pcs</option>
+            <option value="box">Box</option>
+            <option value="pack">Pack</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Harga Jual (Rp) <span class="required">*</span></label>
+        <input type="number" id="f-sell-price" class="form-control font-mono" placeholder="0" min="0" style="font-size:18px;font-weight:700">
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="f-is-mochi" style="width:18px;height:18px">
+          <span><strong>📊 Item ini dimonitor stoknya</strong><br><small style="color:var(--text-muted)">Centang jika produk (atau varian) ini stoknya perlu dipantau di halaman Monitoring Stok dan berkurang otomatis saat terjual.</small></span>
+        </label>
+      </div>
+
+      <div class="form-group" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px">
+        <label class="form-label" style="font-weight:700;font-size:13px;margin-bottom:6px">📦 Isi per porsi (pcs)</label>
+        <div style="display:flex;align-items:center;gap:10px">
+          <input type="number" id="f-pcs" class="form-control font-mono" min="1" step="1" value="1" style="width:120px;font-weight:700;font-size:16px">
+          <small style="color:var(--text-secondary);flex:1">Jumlah pcs yang berkurang dari stok tiap 1 porsi terjual. Contoh: 1 porsi = 4 pcs → isi <strong>4</strong>. Untuk produk satuan biasa, biarkan <strong>1</strong>.</small>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="f-show-pos" checked style="width:18px;height:18px">
+          <span><strong>🛒 Tampilkan di halaman Kasir/POS</strong><br><small style="color:var(--text-muted)">Uncheck kalau produk ini hanya untuk stok internal (misal bahan setengah jadi) dan tidak dijual langsung.</small></span>
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="f-needs-cooking" checked style="width:18px;height:18px">
+          <span><strong>👨‍🍳 Kirim ke Dapur saat terjual</strong><br><small style="color:var(--text-muted)">Produk ini muncul di layar antrian masak dan harus dicentang juru masak. Uncheck untuk item yang tinggal ambil (saus botolan, minuman kemasan, dll).</small></span>
+        </label>
+      </div>
+
+      <div class="form-group" style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:14px">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <input type="checkbox" id="f-is-mix" style="width:18px;height:18px" onchange="onMixToggle()">
+          <span><strong>🎲 Produk ini paket Mix (dikomposisi di kasir)</strong><br><small style="color:var(--text-muted)">Kasir bisa memilih campuran pcs tiap rasa saat menjual. Komponen rasa & pcs default diatur di daftar "Kurangi Stok Item" di bawah.</small></span>
+        </label>
+        <div id="mix-size-group" style="display:none;margin-top:10px">
+          <label class="form-label" style="font-size:13px">Total pcs per porsi Mix</label>
+          <input type="number" id="f-mix-size" class="form-control font-mono" min="1" step="1" value="4" style="width:120px;font-weight:700">
+        </div>
+      </div>
+
+      <!-- Kurangi Stok Item Mana? (checkbox selection) -->
+      <div class="form-group" id="stocklink-section" style="display:none;background:#eff6ff;border:1px solid #93c5fd;border-radius:10px;padding:14px">
+        <label class="form-label" style="font-weight:700;margin-bottom:6px;font-size:13px">🔗 Resep / Komponen — kurangi stok item LAIN</label>
+        <div style="font-size:12px;color:#1e40af;margin-bottom:10px;line-height:1.5">
+          Opsional (untuk produk racikan/paket). Centang item stok LAIN yang ikut berkurang saat produk ini terjual, lalu isi jumlah pcs-nya.<br>
+          Untuk produk <strong>Mix</strong>: centang rasa-rasa yang jadi pilihan komponen + pcs default.<br>
+          Kalau tidak dicentang apa-apa, yang berkurang cukup stoknya sendiri sesuai <strong>Isi per porsi (pcs)</strong> di atas.
+        </div>
+        <div id="stocklink-checkboxes" style="max-height:240px;overflow-y:auto;background:white;border:1px solid #dbeafe;border-radius:8px"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Foto Produk</label>
+        <div style="display:flex;gap:10px;align-items:flex-start">
+          <div id="img-preview" style="width:70px;height:70px;border:2px dashed var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:28px;background:var(--bg-light);flex-shrink:0">🦐</div>
+          <div style="flex:1">
+            <input type="file" id="f-image-file" class="form-control" accept="image/*" onchange="handleImageUpload(this)" style="margin-bottom:6px">
+            <input type="text" id="f-image-url" class="form-control" placeholder="Atau paste URL gambar" oninput="previewImageUrl(this.value)" style="font-size:12px">
+            <input type="hidden" id="f-image-data">
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Deskripsi</label>
+        <input type="text" id="f-desc" class="form-control" placeholder="Keterangan tambahan (opsional)">
+      </div>
+      <div class="form-group" id="status-group" style="display:none">
+        <label class="form-label">Status</label>
+        <select id="f-active" class="form-control">
+          <option value="1">✅ Aktif</option>
+          <option value="0">❌ Nonaktif</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('product-modal')">Batal</button>
+      <button class="btn btn-primary" id="save-btn" onclick="saveProduct()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+// Redirect cashier away from admin page
+// Gerbang halaman ditangani initPage() berdasarkan hak akses. Pemeriksaan
+// "harus admin" yang lama dihapus karena menendang keluar peran sah lain
+// (supervisor, tim produksi, runner) yang justru diberi izin untuk halaman ini.
+initPage('products', 'Produk', 'Kelola menu dan harga Ujang Kedu');
+
+let allProducts = [], categories = [];
+
+function handleImageUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 500*1024) { showToast('Ukuran foto max 500KB','warning'); input.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const data = e.target.result;
+    document.getElementById('f-image-data').value = data;
+    document.getElementById('f-image-url').value = '';
+    document.getElementById('img-preview').innerHTML = `<img src="${data}" style="width:70px;height:70px;object-fit:cover;border-radius:6px">`;
+  };
+  reader.readAsDataURL(file);
+}
+
+function previewImageUrl(url) {
+  document.getElementById('f-image-data').value = '';
+  if (url) {
+    document.getElementById('img-preview').innerHTML = `<img src="${url}" style="width:70px;height:70px;object-fit:cover;border-radius:6px" onerror="this.parentElement.innerHTML='🦐'">`;
+  } else {
+    document.getElementById('img-preview').innerHTML = '🦐';
+  }
+}
+
+async function loadAll() {
+  try {
+    [allProducts, categories] = await Promise.all([
+      API.get('/products'),
+      API.get('/products/meta/categories')
+    ]);
+    // Include inactive products for admin view
+    const user = Auth.getUser();
+    if (user?.role === 'admin') {
+      // Also fetch inactive - just use allProducts as is, filter display
+    }
+    renderKPI(allProducts);
+    renderTable(allProducts);
+    populateFilters(categories);
+  } catch(e) { showToast('Gagal memuat produk: ' + e.message, 'error'); }
+}
+
+function renderKPI(products) {
+  const mochi = products.filter(p => p.is_mochi).length; // tetap "is_mochi" internal, arti = track_stock
+  const topping = products.filter(p => !p.is_mochi).length;
+  const active = products.filter(p => p.is_active).length;
+  document.getElementById('product-kpi').innerHTML = `
+    <div class="kpi-card primary"><div class="kpi-icon">🦐</div><div class="kpi-label">Total Produk</div><div class="kpi-value">${products.length}</div></div>
+    <div class="kpi-card success"><div class="kpi-icon">✅</div><div class="kpi-label">Aktif</div><div class="kpi-value">${active}</div></div>
+    <div class="kpi-card secondary"><div class="kpi-icon">🦐</div><div class="kpi-label">Item Termonitor</div><div class="kpi-value">${mochi}</div></div>
+    <div class="kpi-card warning"><div class="kpi-icon">✨</div><div class="kpi-label">Topping</div><div class="kpi-value">${topping}</div></div>
+  `;
+}
+
+function renderTable(products) {
+  document.getElementById('product-tbody').innerHTML = products.map(p => `
+    <tr style="${!p.is_active ? 'opacity:0.5' : ''}">
+      <td class="product-code">${p.code}</td>
+      <td>
+        ${p.image_url ? `<img src="${p.image_url}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;margin-right:8px;vertical-align:middle" onerror="this.style.display='none'">` : ''}
+        <span style="font-weight:600;vertical-align:middle">${p.name}</span>
+        ${p.is_mix ? `<span class="badge badge-warning" style="font-size:10px;margin-left:6px">🎲 Mix ${p.mix_size||''} pcs</span>` : (p.pcs_per_porsi>1 ? `<span class="badge badge-secondary" style="font-size:10px;margin-left:6px">📦 ${p.pcs_per_porsi} pcs/porsi</span>` : '')}
+        ${p.variant_count > 0 ? `<span class="badge badge-warning" style="font-size:10px;margin-left:6px">🧬 ${p.variant_count} varian</span>` : ''}
+      </td>
+      <td>${p.category_name ? `<span class="badge badge-primary" style="font-size:11px">${p.category_name}</span>` : '-'}</td>
+      <td class="currency fw-bold" style="color:var(--primary)">${fmt.currency(p.sell_price)}</td>
+      <td>${p.unit}</td>
+      <td>${p.is_mochi
+        ? '<span class="badge badge-success">📊 Termonitor</span>'
+        : ''}</td>
+      <td><span class="badge ${p.is_active ? 'badge-success' : 'badge-danger'}">${p.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn-icon" onclick="openEditModal(${p.id})" title="Edit">✏️</button>
+          <button class="btn-icon" onclick="toggleActive(${p.id}, ${p.is_active})" title="${p.is_active ? 'Nonaktifkan' : 'Aktifkan'}"
+            style="color:var(--${p.is_active ? 'warning' : 'success'})">${p.is_active ? '⏸️' : '▶️'}</button>
+          <button class="btn-icon" onclick="deleteProduct(${p.id}, '${p.name.replace(/'/g, "\\'")}')" title="Hapus" style="color:var(--danger)">🗑️</button>
+        </div>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="8" class="text-center text-muted" style="padding:30px">Belum ada produk</td></tr>';
+}
+
+function populateFilters(cats) {
+  const catFilter = document.getElementById('cat-filter');
+  catFilter.innerHTML = '<option value="">Semua Kategori</option>' + cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+  const fCat = document.getElementById('f-category');
+  fCat.innerHTML = '<option value="">-- Pilih Kategori --</option>' + cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+}
+
+function filterTable() {
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const catId = document.getElementById('cat-filter').value;
+  const filtered = allProducts.filter(p => {
+    const ms = !search || p.name.toLowerCase().includes(search) || p.code.toLowerCase().includes(search);
+    const mc = !catId || String(p.category_id) === catId;
+    return ms && mc;
+  });
+  renderTable(filtered);
+}
+
+function openAddModal() {
+  document.getElementById('modal-title').textContent = 'Tambah Produk Baru';
+  document.getElementById('edit-id').value = '';
+  document.getElementById('f-code').value = '';
+  document.getElementById('f-barcode').value = '';
+  document.getElementById('f-name').value = '';
+  document.getElementById('f-sell-price').value = '';
+  document.getElementById('f-category').value = '';
+  document.getElementById('f-unit').value = 'porsi';
+  document.getElementById('f-is-mochi').checked = true;
+  document.getElementById('f-pcs').value = 1;
+  document.getElementById('f-show-pos').checked = true;
+  document.getElementById('f-needs-cooking').checked = true;
+  document.getElementById('f-is-mix').checked = false;
+  document.getElementById('f-mix-size').value = 4;
+  onMixToggle();
+  document.getElementById('f-desc').value = '';
+  document.getElementById('f-code').disabled = false;
+  document.getElementById('status-group').style.display = 'none';
+  document.getElementById('stocklink-section').style.display = 'none';
+  document.getElementById('f-image-data').value='';
+  document.getElementById('f-image-url').value='';
+  document.getElementById('f-image-file').value='';
+  document.getElementById('img-preview').innerHTML='🦐';
+  openModal('product-modal');
+  setTimeout(() => document.getElementById('f-code').focus(), 300);
+}
+
+function openEditModal(id) {
+  const p = allProducts.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('modal-title').textContent = 'Edit Produk';
+  document.getElementById('edit-id').value = p.id;
+  document.getElementById('f-code').value = p.code;
+  document.getElementById('f-code').disabled = true;
+  document.getElementById('f-barcode').value = p.barcode || '';
+  document.getElementById('f-name').value = p.name;
+  document.getElementById('f-sell-price').value = p.sell_price;
+  document.getElementById('f-category').value = p.category_id || '';
+  document.getElementById('f-unit').value = p.unit || 'porsi';
+  document.getElementById('f-is-mochi').checked = !!p.is_mochi;
+  document.getElementById('f-pcs').value = p.pcs_per_porsi || 1;
+  document.getElementById('f-show-pos').checked = p.show_in_pos !== 0;
+  document.getElementById('f-needs-cooking').checked = p.needs_cooking !== 0;
+  document.getElementById('f-is-mix').checked = !!p.is_mix;
+  document.getElementById('f-mix-size').value = p.mix_size || 4;
+  onMixToggle();
+  document.getElementById('f-desc').value = p.description || '';
+  document.getElementById('f-active').value = p.is_active;
+  document.getElementById('status-group').style.display = '';
+  document.getElementById('stocklink-section').style.display = '';
+  loadStockLink(p.id);
+  // Restore existing image
+  document.getElementById('f-image-data').value = p.image_url || '';
+  document.getElementById('f-image-url').value = '';
+  if (p.image_url) {
+    document.getElementById('img-preview').innerHTML = `<img src="${p.image_url}" style="width:70px;height:70px;object-fit:cover;border-radius:6px">`;
+  } else {
+    document.getElementById('img-preview').innerHTML = '🦐';
+  }
+  openModal('product-modal');
+}
+
+// ==== STOCK LINK (Kurangi Item Stok) — pilih item + jumlah pcs ====
+function onMixToggle() {
+  const on = document.getElementById('f-is-mix').checked;
+  document.getElementById('mix-size-group').style.display = on ? '' : 'none';
+  const lbl = document.querySelector('#stocklink-section .form-label');
+  if (lbl) lbl.innerHTML = on ? '🎲 Komponen Mix (rasa & pcs default)' : '🔗 Kurangi Stok Item Mana? (& berapa pcs)';
+}
+let stockItemsCache = [];
+let currentLinks = new Map(); // stock_item_id -> quantity (pcs per porsi)
+
+async function loadStockLink(productId) {
+  try {
+    stockItemsCache = await API.get('/products/meta/stock-items');
+    const existing = await API.get(`/products/${productId}/stock-link`);
+    currentLinks = new Map(existing.map(l => [l.stock_item_id, l.quantity || 1]));
+    renderStockLinkCheckboxes(productId);
+  } catch(e) {
+    document.getElementById('stocklink-checkboxes').innerHTML = '<div style="padding:12px;color:#6b7280;font-size:12px">Gagal memuat: ' + e.message + '</div>';
+  }
+}
+
+function renderStockLinkCheckboxes(productId) {
+  const box = document.getElementById('stocklink-checkboxes');
+  if (!stockItemsCache.length) {
+    box.innerHTML = '<div style="padding:14px;text-align:center;color:#6b7280;font-size:12px">Belum ada item stok tersedia. Aktifkan "dimonitor stoknya" pada produk lain dulu.</div>';
+    return;
+  }
+  const items = stockItemsCache.filter(it => it.id !== productId); // diri sendiri ditangani "Isi per porsi"
+  if (!items.length) {
+    box.innerHTML = '<div style="padding:14px;text-align:center;color:#6b7280;font-size:12px">Tidak ada item stok lain. (Diri sendiri diatur lewat "Isi per porsi (pcs)" di atas.)</div>';
+    return;
+  }
+  box.innerHTML = items.map(it => {
+    const checked = currentLinks.has(it.id);
+    const qty = checked ? currentLinks.get(it.id) : 1;
+    const isSelf = false;
+    return `<label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #f3f4f6;cursor:pointer"
+      onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background='white'">
+      <input type="checkbox" ${checked?'checked':''} onchange="onLinkCheckboxChange(${productId}, ${it.id}, this.checked)" style="width:16px;height:16px;cursor:pointer">
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:13px">${it.name}${isSelf?' <span style="font-size:10px;color:#3b82f6;font-weight:700">(produk ini sendiri)</span>':''}</div>
+        <div style="font-size:11px;color:#6b7280;font-family:ui-monospace,monospace">${it.code} · ${it.category_name||'-'}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:5px" onclick="event.preventDefault()">
+        <input type="number" min="1" step="1" value="${qty}" id="lnkqty-${it.id}" ${checked?'':'disabled'}
+          onchange="onLinkQtyChange(${productId}, ${it.id}, this.value)" onclick="event.stopPropagation()"
+          style="width:58px;padding:5px 6px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;text-align:center;font-weight:700;${checked?'':'opacity:0.4'}">
+        <span style="font-size:11px;color:#6b7280">pcs</span>
+      </div>
+    </label>`;
+  }).join('');
+}
+
+function collectLinkItems() {
+  return Array.from(currentLinks.entries()).map(([sid, q]) => ({ stock_item_id: sid, quantity: Math.max(1, parseInt(q) || 1) }));
+}
+
+async function saveLinks(productId) {
+  await API.put(`/products/${productId}/stock-link`, { items: collectLinkItems() });
+}
+
+async function onLinkCheckboxChange(productId, itemId, checked) {
+  const prev = new Map(currentLinks);
+  if (checked) {
+    const q = parseInt(document.getElementById('lnkqty-'+itemId)?.value) || 1;
+    currentLinks.set(itemId, Math.max(1, q));
+  } else {
+    currentLinks.delete(itemId);
+  }
+  // enable/disable the qty input tanpa render ulang penuh
+  const qEl = document.getElementById('lnkqty-'+itemId);
+  if (qEl) { qEl.disabled = !checked; qEl.style.opacity = checked ? '1' : '0.4'; }
+  try {
+    await saveLinks(productId);
+    showToast(checked?`Dikaitkan (${currentLinks.get(itemId)} pcs)`:'Item dilepas','success');
+  } catch(e) {
+    currentLinks = prev;
+    renderStockLinkCheckboxes(productId);
+    showToast(e.message,'error');
+  }
+}
+
+async function onLinkQtyChange(productId, itemId, val) {
+  if (!currentLinks.has(itemId)) return;
+  const q = Math.max(1, parseInt(val) || 1);
+  const prev = new Map(currentLinks);
+  currentLinks.set(itemId, q);
+  try {
+    await saveLinks(productId);
+    showToast(`Jumlah diset ${q} pcs`,'success');
+  } catch(e) {
+    currentLinks = prev;
+    renderStockLinkCheckboxes(productId);
+    showToast(e.message,'error');
+  }
+}
+
+async function saveProduct() {
+  const id = document.getElementById('edit-id').value;
+  const data = {
+    code: document.getElementById('f-code').value.trim(),
+    barcode: document.getElementById('f-barcode').value.trim() || null,
+    name: document.getElementById('f-name').value.trim(),
+    sell_price: parseFloat(document.getElementById('f-sell-price').value) || 0,
+    buy_price: 0,
+    category_id: document.getElementById('f-category').value || null,
+    unit: document.getElementById('f-unit').value,
+    is_mochi: document.getElementById('f-is-mochi').checked ? 1 : 0,
+    track_stock: document.getElementById('f-is-mochi').checked ? 1 : 0,
+    is_mix: document.getElementById('f-is-mix').checked ? 1 : 0,
+    mix_size: parseInt(document.getElementById('f-mix-size').value) || 0,
+    pcs_per_porsi: Math.max(1, parseInt(document.getElementById('f-pcs').value) || 1),
+    show_in_pos: document.getElementById('f-show-pos').checked ? 1 : 0,
+    needs_cooking: document.getElementById('f-needs-cooking').checked ? 1 : 0,
+    description: document.getElementById('f-desc').value.trim(),
+    is_active: parseInt(document.getElementById('f-active').value || '1'),
+    image_url: (document.getElementById('f-image-data').value || document.getElementById('f-image-url').value) || undefined,
+  };
+  if (!data.code || !data.name || !data.sell_price) {
+    showToast('Kode, nama, dan harga jual wajib diisi', 'warning'); return;
+  }
+  const btn = document.getElementById('save-btn'); btn.disabled = true;
+  try {
+    if (id) await API.put(`/products/${id}`, data);
+    else await API.post('/products', data);
+    showToast('Produk berhasil disimpan', 'success');
+    closeModal('product-modal');
+    await loadAll();
+  } catch(e) { showToast(e.message, 'error'); }
+  btn.disabled = false;
+}
+
+async function toggleActive(id, current) {
+  const action = current ? 'menonaktifkan' : 'mengaktifkan';
+  confirmDialog(`Yakin ingin ${action} produk ini?`, async () => {
+    try {
+      await API.put(`/products/${id}`, { is_active: current ? 0 : 1 });
+      showToast('Status produk diperbarui', 'success');
+      await loadAll();
+    } catch(e) { showToast(e.message, 'error'); }
+  });
+}
+
+async function deleteProduct(id, name) {
+  confirmDialog(
+    `Hapus produk "<strong>${name}</strong>"?<br><small style="color:var(--text-muted)">Jika pernah dijual, produk hanya akan dinonaktifkan.</small>`,
+    async () => {
+      try {
+        const res = await API.delete(`/products/${id}`);
+        showToast(res.message, 'success');
+        await loadAll();
+      } catch(e) { showToast(e.message, 'error'); }
+    },
+    'Hapus Produk'
+  );
+}
+
+loadAll();
+
+
+/* Ekspor daftar produk beserta harga & pengaturannya. */
+function exportExcel(btn) {
+  if (!allProducts.length) return showToast('Belum ada data untuk diekspor','warning');
+  downloadExcel({
+    filename: 'daftar-produk-' + getToday(),
+    sheets: [{
+      name:'Produk', title:'Daftar Produk \u2014 Ujang Kedu',
+      meta: excelMeta([['Jumlah produk', allProducts.length]]),
+      columns:[
+        {header:'Kode',key:'kode'},{header:'Nama Produk',key:'nama',width:30},{header:'Kategori',key:'kategori'},
+        {header:'Harga Jual (Rp)',key:'harga',type:'money'},{header:'Satuan',key:'satuan'},
+        {header:'Isi per Porsi (pcs)',key:'pcs',type:'number'},{header:'Stok Dimonitor',key:'stok'},
+        {header:'Tampil di Kasir',key:'pos'},{header:'Kirim ke Dapur',key:'dapur'},{header:'Status',key:'status'}],
+      rows: allProducts.map(p => ({ kode:p.code, nama:p.name, kategori:p.category_name||'-', harga:p.sell_price||0,
+        satuan:p.unit||'-', pcs:p.pcs_per_porsi||1, stok:p.track_stock?'Ya':'Tidak',
+        pos:p.show_in_pos===0?'Tidak':'Ya', dapur:p.needs_cooking===0?'Tidak':'Ya',
+        status:p.is_active?'Aktif':'Nonaktif' })),
+    }],
+  }, btn);
+}
+</script>
+</body>
+</html>

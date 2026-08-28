@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Role & Hak Akses — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.role-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:14px; }
+.role-card { border:1.5px solid var(--border); border-radius:12px; padding:16px; background:#fff; transition:border-color .15s, box-shadow .15s; }
+.role-card:hover { border-color:var(--primary); box-shadow:0 4px 14px rgba(0,0,0,.07); }
+.role-card h3 { margin:0 0 4px; font-size:16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.role-meta { font-size:12px; color:var(--text-muted); margin-bottom:12px; line-height:1.5; }
+.perm-count { display:inline-block; background:var(--bg-light); border-radius:20px; padding:3px 10px; font-size:11px; font-weight:700; }
+.perm-group { border:1px solid var(--border); border-radius:10px; margin-bottom:10px; overflow:hidden; }
+.perm-group-head { background:var(--bg-light); padding:10px 14px; display:flex; align-items:center; gap:10px; cursor:pointer; user-select:none; }
+.perm-group-head strong { flex:1; font-size:14px; }
+.perm-group-body { padding:6px 14px 12px; display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:2px; }
+.perm-item { display:flex; align-items:flex-start; gap:10px; padding:8px 6px; border-radius:7px; cursor:pointer; }
+.perm-item:hover { background:var(--bg-light); }
+.perm-item input { width:17px; height:17px; margin-top:2px; flex-shrink:0; cursor:pointer; }
+.perm-item .lbl { font-size:13px; line-height:1.35; }
+.perm-item .key { display:block; font-size:10.5px; color:var(--text-muted); font-family:ui-monospace,monospace; margin-top:1px; }
+.sys-badge { background:#eef2ff; color:#4338ca; font-size:10px; font-weight:700; padding:2px 8px; border-radius:20px; }
+@media (max-width:600px){ .perm-group-body{grid-template-columns:1fr} .role-grid{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">🛡️ Role & Hak Akses</div><div class="page-subtitle">Atur izin setiap peran secara mendetail</div></div>
+    <div class="top-bar-actions">
+      <button class="btn btn-primary" data-perm="roles.edit" onclick="openRole()">+ Role Baru</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div class="alert-info" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:13px;color:#1e40af;line-height:1.6">
+      💡 Perubahan hak akses berlaku setelah user terkait <b>login ulang</b>. Role <b>Administrator</b> selalu punya akses penuh dan tidak bisa dibatasi, agar sistem tidak terkunci.
+    </div>
+    <div class="role-grid" id="role-grid"></div>
+  </div>
+</div>
+
+<!-- Modal role -->
+<div class="modal-overlay" id="role-modal">
+  <div class="modal-box" style="max-width:820px">
+    <div class="modal-header"><span class="modal-title" id="role-modal-title">Role Baru</span>
+      <span onclick="closeModal('role-modal')" style="cursor:pointer;font-size:20px;margin-left:auto">✕</span></div>
+    <div class="modal-body">
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Nama Role *</label>
+          <input type="text" id="r-name" class="form-control" placeholder="mis. Supervisor Cabang"></div>
+        <div class="form-group"><label class="form-label">Keterangan</label>
+          <input type="text" id="r-desc" class="form-control" placeholder="Deskripsi singkat"></div>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0 12px;padding:12px;background:var(--bg-light);border-radius:10px">
+        <strong style="font-size:13px;margin-right:auto">Hak Akses <span id="perm-total" class="perm-count">0 izin</span></strong>
+        <button class="btn btn-secondary btn-sm" onclick="setAllPerms(true)">Pilih semua</button>
+        <button class="btn btn-secondary btn-sm" onclick="setAllPerms(false)">Kosongkan</button>
+        <button class="btn btn-secondary btn-sm" onclick="applyPreset('kasir')">Preset Kasir</button>
+        <button class="btn btn-secondary btn-sm" onclick="applyPreset('spv')">Preset Supervisor</button>
+      </div>
+
+      <div id="perm-container"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('role-modal')">Batal</button>
+      <button class="btn btn-primary" id="role-save-btn" onclick="saveRole()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+/* CATATAN PENTING — jangan bungkus ulang script ini dengan `if (...) { ... }`.
+   Deklarasi `async function` di dalam sebuah blok TIDAK terangkat ke scope
+   global (berbeda dengan `function` biasa yang terangkat lewat aturan warisan
+   Annex B). Kalau seluruh script dibungkus blok, atribut onclick pada tombol
+   tidak menemukan handler async-nya dan seluruh tombol menjadi mati.
+   Karena itu isi script berada di scope global, dan hanya baris bootstrap di
+   bagian bawah yang dijaga oleh PAGE_OK. */
+const PAGE_OK = initPage('roles','Role & Hak Akses','Atur izin setiap peran');
+
+
+let catalog = [], roles = [], editingId = null;
+
+const PRESETS = {
+  kasir: ['pos.view','pos.sell','pos.print','pos.session_open','pos.session_close','pos.cash_out',
+          'sales.view','stock.view','settings.view','shift.view_own'],
+  spv:   ['pos.view','pos.sell','pos.print','pos.void','pos.discount','pos.custom_receipt',
+          'pos.session_open','pos.session_close','pos.cash_out',
+          'sales.view','sales.cancel','sales.export','stock.view','stock.edit',
+          'shift.view_all','shift.report','reports.view','customers.view','settings.view'],
+};
+
+async function load() {
+  try {
+    [catalog, roles] = await Promise.all([API.get('/roles/catalog'), API.get('/roles')]);
+    render();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+function render() {
+  const canEdit = Perms.can('roles.edit');
+  document.getElementById('role-grid').innerHTML = roles.map(r => {
+    const isAll = r.permissions.includes('*');
+    const n = isAll ? 'Semua' : r.permissions.length;
+    return `<div class="role-card">
+      <h3>${r.is_system ? '🔒' : '🛡️'} ${escapeHtmlUI(r.name)}
+        ${r.is_system ? '<span class="sys-badge">BAWAAN</span>' : ''}</h3>
+      <div class="role-meta">${escapeHtmlUI(r.description||'—')}<br>
+        <span class="perm-count">${n} izin</span>
+        <span class="perm-count">${r.user_count} user</span>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="openRole(${r.id})">${canEdit?'✏️ Atur Izin':'👁️ Lihat'}</button>
+        ${canEdit && !r.is_system ? `<button class="btn btn-secondary btn-sm" style="color:var(--danger)" onclick="delRole(${r.id})">🗑️</button>` : ''}
+      </div></div>`;
+  }).join('') || '<p class="text-muted">Belum ada role.</p>';
+}
+
+function escapeHtmlUI(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function renderPermChecks(selected, readOnly) {
+  const sel = new Set(selected);
+  document.getElementById('perm-container').innerHTML = catalog.map(g => `
+    <div class="perm-group">
+      <div class="perm-group-head" onclick="toggleGroup(this)">
+        <span style="font-size:17px">${g.icon}</span>
+        <strong>${g.label}</strong>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted)" onclick="event.stopPropagation()">
+          <input type="checkbox" class="grp-all" data-grp="${g.key}" ${readOnly?'disabled':''} onchange="toggleGroupAll('${g.key}',this.checked)"> semua
+        </label>
+        <span style="font-size:13px;color:var(--text-muted)">▾</span>
+      </div>
+      <div class="perm-group-body" data-grp-body="${g.key}">
+        ${g.items.map(([key,label]) => `
+          <label class="perm-item">
+            <input type="checkbox" class="perm-cb" data-grp="${g.key}" value="${key}"
+                   ${sel.has(key)?'checked':''} ${readOnly?'disabled':''} onchange="updatePermCount()">
+            <span class="lbl">${escapeHtmlUI(label)}<code class="key">${key}</code></span>
+          </label>`).join('')}
+      </div>
+    </div>`).join('');
+  updatePermCount();
+}
+
+function toggleGroup(head) {
+  const body = head.nextElementSibling;
+  const hidden = body.style.display === 'none';
+  body.style.display = hidden ? '' : 'none';
+  head.querySelector('span:last-child').textContent = hidden ? '▾' : '▸';
+}
+function toggleGroupAll(grp, checked) {
+  document.querySelectorAll(`.perm-cb[data-grp="${grp}"]`).forEach(cb => { if(!cb.disabled) cb.checked = checked; });
+  updatePermCount();
+}
+function setAllPerms(v) {
+  document.querySelectorAll('.perm-cb').forEach(cb => { if(!cb.disabled) cb.checked = v; });
+  updatePermCount();
+}
+function applyPreset(name) {
+  const set = new Set(PRESETS[name] || []);
+  document.querySelectorAll('.perm-cb').forEach(cb => { if(!cb.disabled) cb.checked = set.has(cb.value); });
+  updatePermCount();
+  showToast('Preset diterapkan — cek lalu Simpan','info');
+}
+function updatePermCount() {
+  const n = document.querySelectorAll('.perm-cb:checked').length;
+  document.getElementById('perm-total').textContent = n + ' izin';
+  // sinkronkan centang "semua" per grup
+  document.querySelectorAll('.grp-all').forEach(g => {
+    const all = [...document.querySelectorAll(`.perm-cb[data-grp="${g.dataset.grp}"]`)];
+    g.checked = all.length > 0 && all.every(cb => cb.checked);
+  });
+}
+function collectPerms() {
+  return [...document.querySelectorAll('.perm-cb:checked')].map(cb => cb.value);
+}
+
+async function openRole(id) {
+  editingId = id || null;
+  const canEdit = Perms.can('roles.edit');
+  const role = id ? roles.find(r => r.id === id) : null;
+  const isAdminRole = role && role.code === 'admin';
+  const readOnly = !canEdit || isAdminRole;
+
+  document.getElementById('role-modal-title').textContent = role ? ('Atur: ' + role.name) : 'Role Baru';
+  document.getElementById('r-name').value = role ? role.name : '';
+  document.getElementById('r-desc').value = role ? (role.description||'') : '';
+  document.getElementById('r-name').disabled = readOnly;
+  document.getElementById('r-desc').disabled = readOnly;
+  document.getElementById('role-save-btn').style.display = readOnly ? 'none' : '';
+
+  const selected = role ? (role.permissions.includes('*') ? catalog.flatMap(g=>g.items.map(i=>i[0])) : role.permissions) : [];
+  renderPermChecks(selected, readOnly);
+  if (isAdminRole) showToast('Role Administrator selalu berakses penuh dan tidak bisa diubah','info');
+  openModal('role-modal');
+}
+
+async function saveRole() {
+  const name = document.getElementById('r-name').value.trim();
+  if (!name) return showToast('Nama role wajib diisi','warning');
+  const perms = collectPerms();
+  if (!perms.length && !confirm('Role ini tidak punya izin sama sekali. Lanjutkan?')) return;
+  const body = { name, description: document.getElementById('r-desc').value.trim(), permissions: perms };
+  const btn = document.getElementById('role-save-btn'); btn.disabled = true;
+  try {
+    if (editingId) await API.put('/roles/'+editingId, body);
+    else await API.post('/roles', body);
+    showToast('Role tersimpan ✅ User terkait perlu login ulang','success',5000);
+    closeModal('role-modal'); load();
+  } catch(e) { showToast(e.message,'error'); }
+  btn.disabled = false;
+}
+
+function delRole(id) {
+  const r = roles.find(x => x.id === id);
+  confirmDialog(`Hapus role <b>${escapeHtmlUI(r.name)}</b>?`, async () => {
+    try { await API.delete('/roles/'+id); showToast('Role dihapus','success'); load(); }
+    catch(e) { showToast(e.message,'error'); }
+  }, 'Hapus Role');
+}
+
+if (PAGE_OK) {
+  load();
+}
+</script>
+</body>
+</html>

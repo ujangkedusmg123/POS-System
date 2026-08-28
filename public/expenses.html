@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Beban & Pengeluaran — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">📋 Beban & Pengeluaran</div><div class="page-subtitle">Monitoring semua pengeluaran operasional</div></div>
+    <div class="top-bar-actions"><button class="btn btn-secondary" onclick="openCatManager()">📂 Kelola Kategori</button><button class="btn btn-secondary" onclick="exportExcel(this)">📗 Excel</button><button class="btn btn-primary" onclick="openAddModal()">+ Tambah Beban</button><button class="btn btn-secondary" onclick="Auth.logout()">🚪 Keluar</button></div>
+  </div>
+  <div class="page-content">
+    <!-- FILTER -->
+    <div class="card mb-4">
+      <div class="card-header"><span class="card-title">🔍 Filter</span><button class="btn btn-secondary btn-sm" onclick="resetFilters()">Reset</button></div>
+      <div class="card-body" style="padding:12px 16px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <input type="date" id="filter-start" class="form-control" style="width:130px">
+          <span style="color:var(--text-muted)">—</span>
+          <input type="date" id="filter-end" class="form-control" style="width:130px">
+          <button class="btn btn-secondary btn-sm" onclick="setQuick('today')">Hari Ini</button>
+          <button class="btn btn-secondary btn-sm" onclick="setQuick('week')">7 Hari</button>
+          <button class="btn btn-secondary btn-sm" onclick="setQuick('month')">Bulan Ini</button>
+          <button class="btn btn-secondary btn-sm" onclick="setQuick('lastmonth')">Bln Lalu</button>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <select id="filter-branch" class="form-control" style="width:160px;display:none"><option value="">Semua Cabang</option></select>
+          <select id="filter-cat" class="form-control" style="width:180px"><option value="">Semua Kategori</option></select>
+          <button class="btn btn-primary" onclick="loadExpenses()">📊 Tampilkan</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI -->
+    <div class="grid-4 mb-4" id="expense-kpi"></div>
+
+    <!-- Chart + Breakdown -->
+    <div class="grid-2 mb-4">
+      <div class="card">
+        <div class="card-header"><span class="card-title">🥧 Distribusi per Kategori</span></div>
+        <div class="card-body"><div style="height:220px"><canvas id="categoryChart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">📊 Rincian Kategori</span></div>
+        <div class="card-body" id="category-list"></div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Daftar Beban & Pengeluaran</span>
+        <div class="search-bar"><span class="search-icon">🔍</span><input type="text" id="exp-search" class="form-control" placeholder="Cari..." oninput="filterTable()" style="width:180px"></div>
+      </div>
+      <div class="table-wrapper">
+        <table class="table">
+          <thead>
+            <tr><th>Tanggal</th><th>Cabang</th><th>Kategori</th><th>Deskripsi</th><th>Jumlah</th><th>Metode</th><th>Operator</th><th>Aksi</th></tr>
+          </thead>
+          <tbody id="expense-tbody"></tbody>
+          <tfoot><tr><td colspan="4" style="text-align:right;font-weight:700;padding:10px 14px">Total:</td><td class="currency fw-bold text-danger" id="expense-total-row" style="padding:10px 14px">Rp 0</td><td colspan="3"></td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="expense-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title" id="exp-modal-title">Tambah Beban</span><button class="modal-close" onclick="closeModal('expense-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-id">
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Cabang <span class="required">*</span></label>
+          <select id="f-branch" class="form-control"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Kategori</label>
+          <select id="f-cat" class="form-control"><option value="">-- Pilih Kategori --</option></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Deskripsi <span class="required">*</span></label>
+        <input type="text" id="f-desc" class="form-control" placeholder="Keterangan pengeluaran">
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Jumlah (Rp) <span class="required">*</span></label>
+          <input type="number" id="f-amount" class="form-control font-mono" placeholder="0" min="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tanggal <span class="required">*</span></label>
+          <input type="date" id="f-date" class="form-control">
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Metode Bayar</label>
+          <select id="f-method" class="form-control">
+            <option value="cash">Tunai</option>
+            <option value="transfer">Transfer</option>
+            <option value="qris">QRIS</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Dompet (sumber dana)</label>
+          <select id="f-wallet" class="form-control"><option value="">— Tanpa dompet —</option></select>
+          <small style="color:var(--text-muted)">Jika dipilih, saldo dompet otomatis berkurang.</small>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">No. Referensi</label>
+        <input type="text" id="f-ref" class="form-control" placeholder="No. kwitansi">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Catatan</label>
+        <textarea id="f-notes" class="form-control" rows="2" placeholder="Opsional"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('expense-modal')">Batal</button>
+      <button class="btn btn-primary" id="save-btn" onclick="saveExpense()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Kelola Kategori Modal -->
+<div class="modal-overlay" id="cat-modal">
+  <div class="modal-box" style="max-width:640px">
+    <div class="modal-header"><span class="modal-title">📂 Kelola Kategori Beban</span><button class="modal-close" onclick="closeModal('cat-modal')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:#e8f4ff;border:1px solid #4a90e2;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px">
+        💡 Kategori bertanda <strong>[HPP]</strong> akan dihitung sebagai <strong>Harga Pokok Penjualan</strong> (mengurangi Laba Kotor). Kategori lain sebagai <strong>Beban Operasional</strong> (mengurangi Laba Bersih).
+      </div>
+
+      <!-- Form Tambah/Edit -->
+      <div style="background:var(--bg-light);border-radius:8px;padding:12px;margin-bottom:14px">
+        <div style="font-weight:700;margin-bottom:8px" id="cat-form-title">➕ Tambah Kategori Baru</div>
+        <input type="hidden" id="cat-edit-id">
+        <div class="form-group" style="margin-bottom:8px">
+          <label class="form-label">Nama Kategori *</label>
+          <input type="text" id="cat-name" class="form-control" placeholder="Misal: Bahan Baku, Sewa, Listrik">
+        </div>
+        <div class="form-group" style="margin-bottom:8px">
+          <label class="form-label">Deskripsi</label>
+          <input type="text" id="cat-desc" class="form-control" placeholder="Opsional">
+        </div>
+        <div class="form-group" style="margin-bottom:8px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="cat-is-hpp" style="width:16px;height:16px">
+            <span>Tandai sebagai <strong>HPP</strong> (Harga Pokok Penjualan)</span>
+          </label>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="saveCat()">💾 Simpan</button>
+          <button class="btn btn-secondary btn-sm" onclick="resetCatForm()">Batal</button>
+        </div>
+      </div>
+
+      <!-- List Kategori -->
+      <div style="font-weight:700;margin-bottom:6px">Daftar Kategori</div>
+      <div class="table-wrapper" style="max-height:320px;overflow-y:auto">
+        <table class="table">
+          <thead><tr><th>Nama</th><th>Jenis</th><th style="text-align:right">Pemakaian</th><th>Aksi</th></tr></thead>
+          <tbody id="cat-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('cat-modal')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+initPage('expenses','Beban & Pengeluaran','Monitoring semua pengeluaran operasional');
+let allExpenses=[], categories=[], branches=[], wallets=[];
+let catChart;
+const user = Auth.getUser();
+const PM_TEXT = {cash:'Tunai',transfer:'Transfer',qris:'QRIS'};
+
+document.getElementById('filter-start').value = getMonthStart();
+document.getElementById('filter-end').value = getToday();
+
+function setQuick(p) {
+  const today=getToday(), s=document.getElementById('filter-start'), e=document.getElementById('filter-end');
+  if(p==='today'){s.value=today;e.value=today;}
+  else if(p==='week'){s.value=daysAgoLocal(6);e.value=today;}
+  else if(p==='month'){s.value=getMonthStart();e.value=today;}
+  else if(p==='lastmonth'){const d=wibNow();d.setDate(1);d.setMonth(d.getMonth()-1);s.value=ymdWib(d);e.value=ymdWib(new Date(d.getFullYear(),d.getMonth()+1,0));}
+  loadExpenses();
+}
+
+function resetFilters() {
+  document.getElementById('filter-start').value=getMonthStart();
+  document.getElementById('filter-end').value=getToday();
+  document.getElementById('filter-branch').value='';
+  document.getElementById('filter-cat').value='';
+  loadExpenses();
+}
+
+async function initFilters() {
+  try {
+    let walletResp;
+    [branches, categories, walletResp] = await Promise.all([API.get('/branches'), API.get('/expenses/categories'), API.get('/wallets')]);
+    wallets = walletResp?.wallets || [];
+    const fw = document.getElementById('f-wallet');
+    if (fw) fw.innerHTML = '<option value="">— Tanpa dompet —</option>' + wallets.filter(w=>w.kind!=='liability').map(w=>`<option value="${w.id}">${w.name} (${fmt.currency(w.current_balance)})</option>`).join('');
+    // Branch filter (admin only)
+    const fb = document.getElementById('filter-branch');
+    const fm = document.getElementById('f-branch');
+    if (user?.role==='admin') {
+      fb.style.display='';
+      branches.filter(b=>b.is_active).forEach(b=>{
+        const o1=document.createElement('option'); o1.value=b.id; o1.textContent=b.name; fb.appendChild(o1);
+        const o2=document.createElement('option'); o2.value=b.id; o2.textContent=b.name; fm.appendChild(o2);
+      });
+    } else {
+      // Kasir: fixed branch
+      fm.innerHTML = `<option value="${user.branch_id}">${user.branch_name||'Cabang saya'}</option>`;
+      fm.disabled = true;
+    }
+    // Category filter
+    const fc = document.getElementById('filter-cat');
+    categories.forEach(c=>{
+      const o=document.createElement('option'); o.value=c.id;
+      o.textContent=(c.is_hpp?'[HPP] ':'')+c.name; fc.appendChild(o);
+    });
+    // Category in modal
+    const fCat = document.getElementById('f-cat');
+    fCat.innerHTML='<option value="">-- Pilih Kategori --</option>'+categories.map(c=>`<option value="${c.id}">${c.is_hpp?'[HPP] ':''}${c.name}</option>`).join('');
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function loadExpenses() {
+  const params = new URLSearchParams({
+    start_date: document.getElementById('filter-start').value,
+    end_date:   document.getElementById('filter-end').value,
+  });
+  const bid = document.getElementById('filter-branch').value;
+  const cid = document.getElementById('filter-cat').value;
+  if (bid) params.set('branch_id', bid);
+  if (cid) params.set('category_id', cid);
+  try {
+    const data = await API.get('/expenses?'+params.toString());
+    allExpenses = data.expenses;
+    renderKPI(allExpenses);
+    renderCategoryChart(allExpenses);
+    renderTable(allExpenses);
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+function renderKPI(expenses) {
+  const total = expenses.reduce((s,e)=>s+e.amount,0);
+  const hpp = expenses.filter(e=>e.is_hpp).reduce((s,e)=>s+e.amount,0);
+  const beban = expenses.filter(e=>!e.is_hpp).reduce((s,e)=>s+e.amount,0);
+  const largest = expenses.length ? Math.max(...expenses.map(e=>e.amount)) : 0;
+  document.getElementById('expense-kpi').innerHTML = `
+    <div class="kpi-card danger"><div class="kpi-icon">💸</div><div class="kpi-label">Total Pengeluaran</div><div class="kpi-value large">${fmt.currency(total)}</div><div class="kpi-change">${expenses.length} transaksi</div></div>
+    <div class="kpi-card warning"><div class="kpi-icon">🏭</div><div class="kpi-label">HPP (Bahan+Kemasan)</div><div class="kpi-value large">${fmt.currency(hpp)}</div><div class="kpi-change">Biaya produksi</div></div>
+    <div class="kpi-card secondary"><div class="kpi-icon">📋</div><div class="kpi-label">Beban Operasional</div><div class="kpi-value large">${fmt.currency(beban)}</div><div class="kpi-change">Non-produksi</div></div>
+    <div class="kpi-card primary"><div class="kpi-icon">💰</div><div class="kpi-label">Pengeluaran Terbesar</div><div class="kpi-value large">${fmt.currency(largest)}</div></div>
+  `;
+}
+
+function renderCategoryChart(expenses) {
+  const cats = {};
+  expenses.forEach(e => {
+    const k = e.category_name||'Lain-lain';
+    cats[k] = (cats[k]||0) + e.amount;
+  });
+  const labels = Object.keys(cats), data = Object.values(cats);
+  const total = data.reduce((s,v)=>s+v,0);
+  if (catChart) catChart.destroy();
+  if (labels.length>0) {
+    catChart = new Chart(document.getElementById('categoryChart'),{
+      type:'doughnut',
+      data:{labels,datasets:[{data,backgroundColor:['#dc2626','#d97706','#1e6fe8','#0ea5a0','#16a34a','#7c3aed','#db2777','#ea580c'],borderWidth:0,hoverOffset:8}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:11}}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${fmt.currency(ctx.raw)}`}}},cutout:'60%'}
+    });
+  }
+  document.getElementById('category-list').innerHTML = Object.entries(cats)
+    .sort((a,b)=>b[1]-a[1])
+    .map(([name,val])=>{
+      const pct = total>0?(val/total*100).toFixed(1):0;
+      const cat = categories.find(c=>c.name===name);
+      return `<div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+          <span style="font-size:13px;font-weight:600">${cat?.is_hpp?'[HPP] ':''}${name}</span>
+          <span class="font-mono" style="font-size:13px">${fmt.currency(val)} <span style="color:var(--text-muted)">${pct}%</span></span>
+        </div>
+        <div style="background:var(--border);border-radius:4px;height:8px"><div style="width:${pct}%;height:8px;border-radius:4px;background:var(--danger)"></div></div>
+      </div>`;
+    }).join('') || '<div class="empty-state"><p>Belum ada data</p></div>';
+}
+
+let displayedExpenses = [];
+function renderTable(expenses) {
+  displayedExpenses = expenses;
+  const total = expenses.reduce((s,e)=>s+e.amount,0);
+  document.getElementById('expense-total-row').textContent = fmt.currency(total);
+  document.getElementById('expense-tbody').innerHTML = expenses.map(e=>`<tr>
+    <td style="white-space:nowrap">${fmt.date(e.expense_date)}</td>
+    <td style="font-size:12px">${e.branch_name||'<span style="color:var(--text-muted)">—</span>'}</td>
+    <td><span class="badge ${e.is_hpp?'badge-warning':'badge-primary'}" style="font-size:11px">${e.is_hpp?'[HPP] ':''}${e.category_name||'Lain-lain'}</span></td>
+    <td style="font-weight:500">${e.description}</td>
+    <td class="currency fw-bold text-danger">${fmt.currency(e.amount)}</td>
+    <td style="font-size:12px">${PM_TEXT[e.payment_method]||e.payment_method}${e.wallet_name?`<br><span class="badge badge-primary" style="font-size:10px">👛 ${e.wallet_name}</span>`:''}</td>
+    <td style="font-size:12px">${e.created_by_name||'-'}</td>
+    <td><div style="display:flex;gap:4px">
+      <button class="btn-icon" onclick="openEditModal(${e.id})" title="Edit">✏️</button>
+      <button class="btn-icon" onclick="deleteExpense(${e.id})" title="Hapus" style="color:var(--danger)">🗑️</button>
+    </div></td>
+  </tr>`).join('') || '<tr><td colspan="8" class="text-center text-muted" style="padding:30px">Belum ada data beban</td></tr>';
+}
+
+function filterTable() {
+  const q = document.getElementById('exp-search').value.toLowerCase();
+  renderTable(allExpenses.filter(e => !q || e.description.toLowerCase().includes(q) || (e.category_name||'').toLowerCase().includes(q) || (e.branch_name||'').toLowerCase().includes(q)));
+}
+
+function openAddModal() {
+  document.getElementById('exp-modal-title').textContent = 'Tambah Beban';
+  document.getElementById('edit-id').value = '';
+  document.getElementById('f-cat').value = '';
+  document.getElementById('f-desc').value = '';
+  document.getElementById('f-amount').value = '';
+  document.getElementById('f-date').value = getToday();
+  document.getElementById('f-method').value = 'cash';
+  document.getElementById('f-wallet').value = '';
+  document.getElementById('f-ref').value = '';
+  document.getElementById('f-notes').value = '';
+  // Set branch default
+  if (user?.role === 'admin' && branches.length>0) document.getElementById('f-branch').value = branches[0].id;
+  openModal('expense-modal');
+}
+
+function openEditModal(id) {
+  const e = allExpenses.find(x=>x.id===id); if(!e) return;
+  document.getElementById('exp-modal-title').textContent = 'Edit Beban';
+  document.getElementById('edit-id').value = e.id;
+  document.getElementById('f-branch').value = e.branch_id||'';
+  document.getElementById('f-cat').value = e.category_id||'';
+  document.getElementById('f-desc').value = e.description;
+  document.getElementById('f-amount').value = e.amount;
+  document.getElementById('f-date').value = e.expense_date;
+  document.getElementById('f-method').value = e.payment_method;
+  document.getElementById('f-wallet').value = e.wallet_id||'';
+  document.getElementById('f-ref').value = e.reference_number||'';
+  document.getElementById('f-notes').value = e.notes||'';
+  openModal('expense-modal');
+}
+
+async function saveExpense() {
+  const id = document.getElementById('edit-id').value;
+  const data = {
+    branch_id:  document.getElementById('f-branch').value||null,
+    category_id: document.getElementById('f-cat').value||null,
+    description: document.getElementById('f-desc').value.trim(),
+    amount:      parseFloat(document.getElementById('f-amount').value),
+    expense_date: document.getElementById('f-date').value,
+    payment_method: document.getElementById('f-method').value,
+    wallet_id: document.getElementById('f-wallet').value || null,
+    reference_number: document.getElementById('f-ref').value.trim(),
+    notes: document.getElementById('f-notes').value.trim(),
+  };
+  if (!data.description||!data.amount||!data.expense_date) { showToast('Deskripsi, jumlah, dan tanggal wajib diisi','warning'); return; }
+  if (!data.branch_id && user?.role==='admin') { showToast('Pilih cabang terlebih dahulu','warning'); return; }
+  const btn=document.getElementById('save-btn'); btn.disabled=true;
+  try {
+    if (id) await API.put('/expenses/'+id, data); else await API.post('/expenses', data);
+    showToast('Data berhasil disimpan','success'); closeModal('expense-modal'); await refreshWalletOptions(); await loadExpenses();
+  } catch(e) { showToast(e.message,'error'); }
+  btn.disabled=false;
+}
+
+async function refreshWalletOptions() {
+  try {
+    const wr = await API.get('/wallets');
+    wallets = wr?.wallets || [];
+    const fw = document.getElementById('f-wallet');
+    if (!fw) return;
+    const cur = fw.value;
+    fw.innerHTML = '<option value="">— Tanpa dompet —</option>' + wallets.filter(w=>w.kind!=='liability').map(w=>`<option value="${w.id}">${w.name} (${fmt.currency(w.current_balance)})</option>`).join('');
+    fw.value = cur;
+  } catch(e) {}
+}
+
+async function deleteExpense(id) {
+  confirmDialog('Yakin ingin menghapus data beban ini?<br><small style="color:var(--text-muted)">Jika beban ini memakai dompet, saldo dompet akan dikembalikan.</small>', async () => {
+    try { await API.delete('/expenses/'+id); showToast('Data dihapus','success'); await refreshWalletOptions(); await loadExpenses(); }
+    catch(e) { showToast(e.message,'error'); }
+  }, 'Hapus Beban');
+}
+
+initFilters().then(()=>loadExpenses());
+
+// ============ KELOLA KATEGORI ============
+async function openCatManager() {
+  await refreshCats();
+  resetCatForm();
+  openModal('cat-modal');
+}
+function resetCatForm() {
+  document.getElementById('cat-edit-id').value='';
+  document.getElementById('cat-name').value='';
+  document.getElementById('cat-desc').value='';
+  document.getElementById('cat-is-hpp').checked=false;
+  document.getElementById('cat-form-title').textContent='➕ Tambah Kategori Baru';
+}
+async function refreshCats() {
+  categories = await API.get('/expenses/categories');
+  document.getElementById('cat-tbody').innerHTML = categories.map(c=>`
+    <tr>
+      <td>
+        <div style="font-weight:600">${c.name}</div>
+        ${c.description?`<div style="font-size:11px;color:var(--text-muted)">${c.description}</div>`:''}
+      </td>
+      <td><span class="badge ${c.is_hpp?'badge-warning':'badge-primary'}" style="font-size:11px">${c.is_hpp?'HPP':'Operasional'}</span></td>
+      <td style="text-align:right">
+        <div style="font-size:12px">${c.expense_count||0} transaksi</div>
+        <div style="font-size:11px;color:var(--text-muted)">${fmt.currency(c.total_amount||0)}</div>
+      </td>
+      <td>
+        <button class="btn-icon" onclick="editCat(${c.id})" title="Edit">✏️</button>
+        <button class="btn-icon" onclick="deleteCat(${c.id},'${c.name.replace(/'/g,'')}',${c.expense_count||0})" title="Hapus" style="color:var(--danger)">🗑️</button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="4" class="text-center text-muted" style="padding:20px">Belum ada kategori</td></tr>';
+  // refresh dropdown di form beban juga
+  const fCat = document.getElementById('f-cat');
+  const cur = fCat.value;
+  fCat.innerHTML = '<option value="">-- Pilih Kategori --</option>' + categories.map(c=>`<option value="${c.id}">${c.is_hpp?'[HPP] ':''}${c.name}</option>`).join('');
+  fCat.value = cur;
+  const fFilter = document.getElementById('filter-cat');
+  const curF = fFilter.value;
+  fFilter.innerHTML = '<option value="">Semua Kategori</option>' + categories.map(c=>`<option value="${c.id}">${c.is_hpp?'[HPP] ':''}${c.name}</option>`).join('');
+  fFilter.value = curF;
+}
+function editCat(id) {
+  const c = categories.find(x=>x.id===id); if (!c) return;
+  document.getElementById('cat-edit-id').value=c.id;
+  document.getElementById('cat-name').value=c.name;
+  document.getElementById('cat-desc').value=c.description||'';
+  document.getElementById('cat-is-hpp').checked=!!c.is_hpp;
+  document.getElementById('cat-form-title').textContent='✏️ Edit Kategori: '+c.name;
+}
+async function saveCat() {
+  const id = document.getElementById('cat-edit-id').value;
+  const name = document.getElementById('cat-name').value.trim();
+  const description = document.getElementById('cat-desc').value.trim();
+  const is_hpp = document.getElementById('cat-is-hpp').checked ? 1 : 0;
+  if (!name) return showToast('Nama kategori wajib diisi','warning');
+  try {
+    if (id) await API.put('/expenses/categories/'+id, {name, description, is_hpp});
+    else await API.post('/expenses/categories', {name, description, is_hpp});
+    showToast('Kategori disimpan','success');
+    resetCatForm();
+    await refreshCats();
+  } catch(e) { showToast(e.message,'error'); }
+}
+function deleteCat(id, name, count) {
+  if (count > 0) {
+    showToast(`Tidak bisa hapus: "${name}" masih dipakai di ${count} transaksi. Pindahkan/hapus dulu transaksinya.`,'warning');
+    return;
+  }
+  confirmDialog(`Hapus kategori <strong>${name}</strong>?`, async()=>{
+    try {
+      await API.delete('/expenses/categories/'+id);
+      showToast('Kategori dihapus','success');
+      await refreshCats();
+    } catch(e) { showToast(e.message,'error'); }
+  }, 'Hapus Kategori');
+}
+
+
+/* Ekspor beban sesuai filter yang sedang aktif di layar. */
+function exportExcel(btn) {
+  const rows = displayedExpenses || [];
+  if (!rows.length) return showToast('Belum ada data untuk diekspor','warning');
+  downloadExcel({
+    filename: 'beban-pengeluaran-' + getToday(),
+    sheets: [{
+      name:'Beban', title:'Beban & Pengeluaran \u2014 Ujang Kedu',
+      meta: excelMeta([['Jumlah baris', rows.length]]),
+      columns:[
+        {header:'Tanggal',key:'tgl',type:'date'},{header:'Kategori',key:'kategori'},{header:'Jenis',key:'jenis'},
+        {header:'Cabang',key:'cabang'},{header:'Keterangan',key:'ket',width:38},
+        {header:'Metode',key:'metode'},{header:'Dibayar dari',key:'dompet'},{header:'Jumlah (Rp)',key:'jumlah',type:'money'}],
+      rows: rows.map(e => ({ tgl:e.expense_date, kategori:e.category_name||'-', jenis:e.is_hpp?'HPP':'Beban Operasional',
+        cabang:e.branch_name||'-', ket:e.description||'-', metode:e.payment_method||'-',
+        dompet:e.wallet_name||'-', jumlah:e.amount||0 })),
+      totals: { tgl:'TOTAL', jumlah: rows.reduce((a,e)=>a+(e.amount||0),0) },
+    }],
+  }, btn);
+}
+</script>
+</body>
+</html>

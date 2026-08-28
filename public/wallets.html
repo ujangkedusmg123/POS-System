@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dompet & Kas Kecil — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.wallets-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); gap:18px; margin-bottom:24px; }
+.wallet-card { background:white; border:1px solid #e5e7eb; border-radius:14px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+.wallet-head { padding:16px 20px; display:flex; justify-content:space-between; align-items:flex-start; gap:10px; border-bottom:1px solid #f3f4f6; }
+.wallet-name { font-weight:800; font-size:15px; color:#0f172a; }
+.wallet-type-badge { font-size:10px; font-weight:700; padding:3px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:0.4px; }
+.type-petty_cash { background:#fef3c7; color:#92400e; }
+.type-bank      { background:#dbeafe; color:#1e40af; }
+.type-ewallet   { background:#e0e7ff; color:#3730a3; }
+.type-other     { background:#f3f4f6; color:#4b5563; }
+.wallet-branch { font-size:11px; color:#6b7280; margin-top:2px; }
+.wallet-body { padding:16px 20px; text-align:center; background:linear-gradient(135deg, #fafbfc, white); }
+.wallet-balance-lbl { font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px; font-weight:700; }
+.wallet-balance { font-size:32px; font-weight:900; font-family:ui-monospace,monospace; letter-spacing:-0.02em; color:#0f172a; margin-top:2px; }
+.wallet-note { font-size:11px; color:#6b7280; margin-top:6px; min-height:14px; }
+.wallet-actions { display:grid; grid-template-columns:1fr 1fr; gap:6px; padding:10px 14px; border-top:1px solid #f3f4f6; background:white; }
+.wallet-actions .btn { padding:8px 10px !important; font-size:12px !important; }
+.wallet-actions-full { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; padding:0 14px 12px; }
+.wallet-actions-full .btn { padding:6px 8px !important; font-size:11px !important; }
+
+.summary-strip { display:flex; gap:14px; background:white; border:1px solid #e5e7eb; border-radius:14px; padding:16px 20px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,0.04); flex-wrap:wrap; }
+.summary-cell { flex:1; min-width:140px; }
+.summary-lbl { font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px; font-weight:700; }
+.summary-val { font-size:22px; font-weight:900; font-family:ui-monospace,monospace; color:#0f172a; margin-top:2px; }
+
+.tx-table { width:100%; border-collapse:collapse; font-size:13px; }
+.tx-table th { background:#f9fafb; padding:10px 14px; text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; border-bottom:1px solid #e5e7eb; font-weight:700; }
+.tx-table td { padding:11px 14px; border-bottom:1px solid #f3f4f6; }
+.tx-in { color:#059669; font-weight:700; }
+.tx-out { color:#dc2626; font-weight:700; }
+.tx-adjust { color:#d97706; font-weight:700; }
+</style>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">💳 Dompet & Kas Kecil</div><div class="page-subtitle">Kelola petty cash, rekening bank, dan e-wallet</div></div>
+    <div class="top-bar-actions">
+      <button class="btn btn-secondary" onclick="openCategoryModal()">🏷️ Kategori</button>
+      <button class="btn btn-secondary" onclick="exportExcel(this)">📗 Excel</button>
+      <button class="btn btn-primary" onclick="openNewWalletModal()">+ Tambah Dompet</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <!-- Summary strip -->
+    <div class="summary-strip" id="summary-strip"></div>
+
+    <!-- Wallet cards -->
+    <div class="wallets-grid" id="wallets-grid"></div>
+
+    <!-- History semua transaksi -->
+    <div class="card">
+      <div class="card-header" style="flex-wrap:wrap;gap:10px">
+        <span class="card-title">📋 Riwayat Transaksi Dompet</span>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input type="date" id="tx-start" class="form-control" style="width:140px">
+          <span style="color:#6b7280">—</span>
+          <input type="date" id="tx-end" class="form-control" style="width:140px">
+          <button class="btn btn-secondary btn-sm" onclick="setTxQuick('today')">Hari Ini</button>
+          <button class="btn btn-secondary btn-sm" onclick="setTxQuick('week')">7 Hari</button>
+          <button class="btn btn-secondary btn-sm" onclick="setTxQuick('month')">Bulan Ini</button>
+          <select id="filter-wallet" class="form-control" style="width:170px">
+            <option value="">Semua Dompet</option>
+          </select>
+          <select id="filter-tx-type" class="form-control" style="width:130px">
+            <option value="">Semua Jenis</option>
+            <option value="topup">Top Up</option>
+            <option value="withdraw">Tarik</option>
+            <option value="adjust">Rekonsiliasi</option>
+            <option value="transfer_in">Transfer Masuk</option>
+            <option value="transfer_out">Transfer Keluar</option>
+            <option value="opening">Saldo Awal</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="loadAllTx()">🔄 Terapkan</button>
+        </div>
+      </div>
+      <div style="padding:12px 20px;background:#fafbfc;border-bottom:1px solid #f3f4f6;font-size:12px;display:flex;gap:20px" id="tx-summary"></div>
+      <div class="table-wrapper">
+        <table class="tx-table">
+          <thead>
+            <tr><th>Tanggal & Jam</th><th>Dompet</th><th>Jenis</th><th>Keterangan</th><th style="text-align:right">Masuk</th><th style="text-align:right">Keluar</th><th style="text-align:right">Saldo</th><th>Operator</th><th></th></tr>
+          </thead>
+          <tbody id="tx-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Kelola Kategori -->
+<div class="modal-overlay" id="category-modal">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-header"><span class="modal-title">🏷️ Kelola Kategori Dompet</span><button class="modal-close" onclick="closeModal('category-modal')">✕</button></div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;background:#f8fafc;border:1px solid #eef2f7;border-radius:10px;padding:12px;margin-bottom:14px">
+        <div style="flex:1;min-width:140px"><label class="form-label">Nama kategori</label><input type="text" id="cat-name" class="form-control" placeholder="Misal: Hutang, Investasi"></div>
+        <div><label class="form-label">Jenis</label>
+          <select id="cat-kind" class="form-control" style="width:150px">
+            <option value="asset">💰 Aset (uang punya)</option>
+            <option value="liability">📕 Hutang (uang terutang)</option>
+          </select>
+        </div>
+        <div style="width:70px"><label class="form-label">Ikon</label><input type="text" id="cat-icon" class="form-control" placeholder="📦" maxlength="2"></div>
+        <input type="hidden" id="cat-edit-id">
+        <button class="btn btn-primary" id="cat-save-btn" onclick="saveCategory()">Tambah</button>
+      </div>
+      <div id="cat-list"></div>
+      <div style="font-size:11px;color:#6b7280;margin-top:8px">Kategori <b>Hutang</b> saldonya dihitung sebagai <b>utang</b> (mengurangi posisi bersih), dan dipantau terpisah di ringkasan.</div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('category-modal')">Tutup</button></div>
+  </div>
+</div>
+
+<!-- Modal: New / Edit Wallet -->
+<div class="modal-overlay" id="wallet-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title" id="wallet-modal-title">Tambah Dompet</span><button class="modal-close" onclick="closeModal('wallet-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="w-edit-id">
+      <div class="form-group">
+        <label class="form-label">Nama Dompet *</label>
+        <input type="text" id="w-name" class="form-control" placeholder="Misal: Kas Kecil Pusat">
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="display:flex;justify-content:space-between;align-items:center">
+          <span>Kategori *</span>
+          <a onclick="openCategoryModal()" style="font-size:12px;color:var(--primary);cursor:pointer;font-weight:600">⚙️ Kelola kategori</a>
+        </label>
+        <select id="w-category" class="form-control" onchange="updateKindHint()"></select>
+        <div id="w-kind-hint" style="font-size:11px;color:#6b7280;margin-top:4px"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cabang (opsional)</label>
+        <select id="w-branch" class="form-control">
+          <option value="">— Tidak spesifik (global) —</option>
+        </select>
+      </div>
+      <div class="form-group" id="w-opening-group">
+        <label class="form-label">Saldo Awal (Rp)</label>
+        <input type="number" id="w-opening" class="form-control" placeholder="0" min="0" style="font-family:ui-monospace,monospace">
+        <div style="font-size:11px;color:#6b7280;margin-top:4px">Kosongkan atau isi 0 kalau belum ada saldo</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Catatan</label>
+        <textarea id="w-notes" class="form-control" rows="2" placeholder="Opsional"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('wallet-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="saveWallet()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Topup -->
+<div class="modal-overlay" id="topup-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title" id="topup-title">➕ Tambah Saldo</span><button class="modal-close" onclick="closeModal('topup-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="t-wallet-id">
+      <div class="form-group"><label class="form-label">Dompet</label><input type="text" id="t-wallet-name" class="form-control" readonly style="background:#f9fafb"></div>
+      <div class="form-group">
+        <label class="form-label">Jumlah (Rp) *</label>
+        <input type="number" id="t-amount" class="form-control" placeholder="0" min="1" style="font-size:22px;font-weight:800;text-align:center;font-family:ui-monospace,monospace">
+      </div>
+      <div class="form-group"><label class="form-label">Keterangan</label><input type="text" id="t-desc" class="form-control" placeholder="Misal: Top up dari owner, hasil penjualan"></div>
+      <div class="form-group"><label class="form-label">No. Referensi</label><input type="text" id="t-ref" class="form-control" placeholder="Opsional (nomor bukti/kwitansi)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('topup-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="saveTopup()">✅ Tambah</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Withdraw -->
+<div class="modal-overlay" id="withdraw-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title" id="withdraw-title">➖ Kurangi Saldo</span><button class="modal-close" onclick="closeModal('withdraw-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="wd-wallet-id">
+      <div class="form-group"><label class="form-label">Dompet</label><input type="text" id="wd-wallet-name" class="form-control" readonly style="background:#f9fafb"></div>
+      <div class="form-group"><label class="form-label">Saldo Sekarang</label><input type="text" id="wd-balance" class="form-control" readonly style="background:#f9fafb;font-family:ui-monospace,monospace;font-weight:800;text-align:right"></div>
+      <div class="form-group">
+        <label class="form-label">Jumlah Ditarik (Rp) *</label>
+        <input type="number" id="wd-amount" class="form-control" placeholder="0" min="1" style="font-size:22px;font-weight:800;text-align:center;font-family:ui-monospace,monospace">
+      </div>
+      <div class="form-group"><label class="form-label">Keterangan *</label><input type="text" id="wd-desc" class="form-control" placeholder="Misal: Beli bahan, bayar listrik"></div>
+      <div class="form-group"><label class="form-label">No. Referensi</label><input type="text" id="wd-ref" class="form-control" placeholder="Opsional (nota, kwitansi)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('withdraw-modal')">Batal</button>
+      <button class="btn btn-danger" onclick="saveWithdraw()">➖ Kurangi</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Adjust / Rekonsiliasi -->
+<div class="modal-overlay" id="adjust-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title">🔧 Rekonsiliasi Saldo</span><button class="modal-close" onclick="closeModal('adjust-modal')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;color:#78350f">⚠️ Gunakan saat saldo fisik/aktual berbeda dari sistem. Nilai yang diinput akan menjadi saldo baru.</div>
+      <input type="hidden" id="a-wallet-id">
+      <div class="form-group"><label class="form-label">Dompet</label><input type="text" id="a-wallet-name" class="form-control" readonly style="background:#f9fafb"></div>
+      <div class="form-group"><label class="form-label">Saldo di Sistem</label><input type="text" id="a-current" class="form-control" readonly style="background:#f9fafb;font-family:ui-monospace,monospace;font-weight:800;text-align:right"></div>
+      <div class="form-group">
+        <label class="form-label">Saldo Aktual (Fisik) *</label>
+        <input type="number" id="a-actual" class="form-control" placeholder="0" min="0" style="font-size:22px;font-weight:800;text-align:center;font-family:ui-monospace,monospace">
+      </div>
+      <div class="form-group"><label class="form-label">Alasan *</label><input type="text" id="a-desc" class="form-control" placeholder="Misal: Hitung fisik akhir bulan, ada selisih"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('adjust-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="saveAdjust()">🔧 Rekonsiliasi</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Transfer -->
+<div class="modal-overlay" id="transfer-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title">↔️ Transfer Antar Dompet</span><button class="modal-close" onclick="closeModal('transfer-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="tr-from-id">
+      <div class="form-group"><label class="form-label">Dari</label><input type="text" id="tr-from-name" class="form-control" readonly style="background:#f9fafb"></div>
+      <div class="form-group">
+        <label class="form-label">Ke Dompet *</label>
+        <select id="tr-to" class="form-control"><option value="">-- Pilih dompet tujuan --</option></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Jumlah (Rp) *</label>
+        <input type="number" id="tr-amount" class="form-control" placeholder="0" min="1" style="font-size:22px;font-weight:800;text-align:center;font-family:ui-monospace,monospace">
+      </div>
+      <div class="form-group"><label class="form-label">Keterangan</label><input type="text" id="tr-desc" class="form-control" placeholder="Opsional"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('transfer-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="saveTransfer()">↔️ Kirim</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Bayar Hutang (dari dompet) -->
+<div class="modal-overlay" id="paydebt-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title">💸 Bayar Hutang</span><button class="modal-close" onclick="closeModal('paydebt-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="pd-debt-id">
+      <div class="form-group"><label class="form-label">Hutang</label><input type="text" id="pd-debt-name" class="form-control" readonly style="background:#f9fafb"></div>
+      <div class="form-group"><label class="form-label">Sisa hutang</label><input type="text" id="pd-debt-remaining" class="form-control" readonly style="background:#fff1f2;color:#dc2626;font-weight:800;text-align:right;font-family:ui-monospace,monospace"></div>
+      <div class="form-group">
+        <label class="form-label">Bayar dari dompet *</label>
+        <select id="pd-source" class="form-control"><option value="">-- Pilih dompet sumber --</option></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Jumlah bayar (Rp) *</label>
+        <input type="number" id="pd-amount" class="form-control" placeholder="0" min="1" style="font-size:22px;font-weight:800;text-align:center;font-family:ui-monospace,monospace">
+      </div>
+      <div class="form-group"><label class="form-label">Keterangan</label><input type="text" id="pd-desc" class="form-control" placeholder="Opsional (mis. cicilan ke-1)"></div>
+      <div style="font-size:11px;color:#6b7280">Saldo dompet sumber berkurang, dan sisa hutang ikut berkurang otomatis.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('paydebt-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="savePayDebt()">💸 Bayar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+initPage('wallets','Dompet & Kas Kecil','Petty cash & rekonsiliasi');
+const user = Auth.getUser();
+let allWallets = [], allBranches = [], allCategories = [];
+let lastTx = [];   // mutasi yang sedang tampil, dipakai saat ekspor Excel
+
+const TYPE_ICON  = {petty_cash:'💵', bank:'🏦', ewallet:'📱', other:'📦'};
+function catIcon(w){ return w.category_icon || TYPE_ICON[w.type] || (w.kind==='liability'?'📕':'📦'); }
+function catLabel(w){ return w.category_name || w.type || (w.kind==='liability'?'Hutang':'Lainnya'); }
+function isDebt(w){ return w.kind === 'liability'; }
+
+async function loadAll() {
+  try {
+    [allBranches] = await Promise.all([API.get('/branches')]);
+    // Populate branch selects
+    const opts = '<option value="">— Global —</option>' + allBranches.filter(b=>b.is_active).map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+    document.getElementById('w-branch').innerHTML = opts;
+    // Default filter: 7 hari terakhir
+    const today = todayLocal();
+    const d = new Date(); d.setDate(d.getDate()-6);
+    document.getElementById('tx-end').value = today;
+    document.getElementById('tx-start').value = (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));
+    await loadWallets();
+    await loadAllTx();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function loadCategories() {
+  try { allCategories = await API.get('/wallets/categories'); } catch(e) { allCategories = []; }
+  // Populate dropdown kategori di form dompet
+  const sel = document.getElementById('w-category');
+  if (sel) {
+    const cur = sel.value;
+    sel.innerHTML = allCategories.map(c => `<option value="${c.id}" data-kind="${c.kind}">${c.icon||''} ${c.name}${c.kind==='liability'?' (Hutang)':''}</option>`).join('');
+    if (cur) sel.value = cur;
+    updateKindHint();
+  }
+}
+function updateKindHint(){
+  const sel = document.getElementById('w-category'); const hint = document.getElementById('w-kind-hint');
+  if (!sel || !hint) return;
+  const opt = sel.options[sel.selectedIndex];
+  const kind = opt?.getAttribute('data-kind');
+  hint.textContent = kind==='liability' ? '📕 Kategori Hutang: saldo = jumlah utang yang harus dibayar.' : '💰 Kategori Aset: saldo = uang yang dimiliki.';
+}
+
+async function loadWallets() {
+  const r = await API.get('/wallets');
+  allWallets = r.wallets;
+  await loadCategories();
+  renderSummary(r);
+  renderCards();
+  // Populate filter dropdown
+  const fw = document.getElementById('filter-wallet');
+  const cur = fw.value;
+  fw.innerHTML = '<option value="">Semua Dompet</option>' + allWallets.map(w=>`<option value="${w.id}">${w.name}</option>`).join('');
+  fw.value = cur;
+}
+
+function renderSummary(r) {
+  const asset = r.total_asset||0, liab = r.total_liability||0, net = r.net_position||(asset-liab);
+  document.getElementById('summary-strip').innerHTML = `
+    <div class="summary-cell"><div class="summary-lbl">💰 Total Aset</div><div class="summary-val" style="color:#059669">${fmt.currency(asset)}</div></div>
+    <div class="summary-cell"><div class="summary-lbl">📕 Total Hutang</div><div class="summary-val" style="color:#dc2626">${fmt.currency(liab)}</div></div>
+    <div class="summary-cell"><div class="summary-lbl">⚖️ Posisi Bersih</div><div class="summary-val" style="color:${net>=0?'#059669':'#dc2626'}">${fmt.currency(net)}</div></div>
+    <div class="summary-cell"><div class="summary-lbl">Jumlah Dompet</div><div class="summary-val">${allWallets.length}</div></div>
+  `;
+}
+
+function renderCards() {
+  const grid = document.getElementById('wallets-grid');
+  if (!allWallets.length) {
+    grid.innerHTML = '<div class="card" style="grid-column:1/-1;padding:40px;text-align:center;color:#6b7280">Belum ada dompet. Klik "+ Tambah Dompet" untuk membuat.</div>';
+    return;
+  }
+  grid.innerHTML = allWallets.map(w => {
+    const isAdmin = user?.role === 'admin';
+    return `<div class="wallet-card" style="${isDebt(w)?'border-top:3px solid #dc2626':''}">
+      <div class="wallet-head">
+        <div>
+          <div class="wallet-name">${catIcon(w)} ${w.name}</div>
+          <div class="wallet-branch">${w.branch_name ? '🏪 '+w.branch_name : 'Global (semua cabang)'}</div>
+        </div>
+        <span class="wallet-type-badge" style="background:${isDebt(w)?'#fee2e2':'#e0e7ff'};color:${isDebt(w)?'#991b1b':'#3730a3'}">${catLabel(w)}</span>
+      </div>
+      <div class="wallet-body">
+        <div class="wallet-balance-lbl">${isDebt(w)?'Sisa hutang':'Saldo saat ini'}</div>
+        <div class="wallet-balance" style="color:${isDebt(w)?'#dc2626':(w.current_balance<0?'#dc2626':'#0f172a')}">${fmt.currency(w.current_balance)}</div>
+        <div class="wallet-note">${w.notes || ''}</div>
+      </div>
+      <div class="wallet-actions">
+        <button class="btn btn-primary" onclick="openTopupModal(${w.id})">${isDebt(w)?'➕ Tambah Hutang':'➕ Tambah'}</button>
+        <button class="btn btn-danger" onclick="${isDebt(w)?`openPayDebtModal(${w.id})`:`openWithdrawModal(${w.id})`}">${isDebt(w)?'💸 Bayar Hutang':'➖ Kurangi'}</button>
+      </div>
+      ${isAdmin ? `
+      <div class="wallet-actions-full">
+        <button class="btn btn-secondary" onclick="openAdjustModal(${w.id})">🔧 Rekon</button>
+        <button class="btn btn-secondary" onclick="openTransferModal(${w.id})">↔️ Transfer</button>
+        <button class="btn btn-secondary" onclick="openEditWalletModal(${w.id})">✏️ Edit</button>
+      </div>
+      <div style="padding:0 14px 12px">
+        <button class="btn btn-secondary" onclick="deleteWallet(${w.id},'${w.name.replace(/'/g,"\\'")}')" style="width:100%;color:#dc2626">🗑️ Hapus Dompet</button>
+      </div>
+      ` : ''}
+    </div>`;
+  }).join('');
+}
+
+async function loadAllTx() {
+  const params = new URLSearchParams();
+  const s = document.getElementById('tx-start').value;
+  const e = document.getElementById('tx-end').value;
+  const w = document.getElementById('filter-wallet').value;
+  const t = document.getElementById('filter-tx-type').value;
+  if (s) params.set('start_date', s);
+  if (e) params.set('end_date', e);
+  if (w) params.set('wallet_id', w);
+  if (t) params.set('type', t);
+  params.set('limit', '300');
+  try {
+    const d = await API.get('/wallets/transactions/all?'+params.toString());
+    renderTxSummary(d.summary);
+    renderAllTx(d.transactions);
+  } catch(ex) { showToast(ex.message,'error'); }
+}
+
+function renderTxSummary(s) {
+  document.getElementById('tx-summary').innerHTML = `
+    <span><strong>${s.count}</strong> transaksi</span>
+    <span style="color:#059669">Total Masuk: <strong>${fmt.currency(s.total_in)}</strong></span>
+    <span style="color:#dc2626">Total Keluar: <strong>${fmt.currency(s.total_out)}</strong></span>
+    <span>Net: <strong style="color:${s.total_in-s.total_out>=0?'#059669':'#dc2626'}">${fmt.currency(s.total_in-s.total_out)}</strong></span>
+  `;
+}
+
+function renderAllTx(txs) {
+  lastTx = txs || [];
+  const label = {topup:'Top Up', withdraw:'Tarik', adjust:'Rekonsiliasi', transfer_in:'Transfer Masuk', transfer_out:'Transfer Keluar', opening:'Saldo Awal'};
+  const TYPE_TAG = {topup:'#d1fae5|#065f46', withdraw:'#fee2e2|#991b1b', adjust:'#fef3c7|#92400e', transfer_in:'#dbeafe|#1e40af', transfer_out:'#e0e7ff|#3730a3', opening:'#f3f4f6|#4b5563'};
+  document.getElementById('tx-tbody').innerHTML = (txs||[]).map(t => {
+    const isIn = t.amount > 0;
+    const [bg, col] = (TYPE_TAG[t.type] || '#f3f4f6|#4b5563').split('|');
+    return `<tr>
+      <td style="white-space:nowrap;font-size:12px">
+        <div style="font-weight:600">${fmt.dateTime ? fmt.dateTime(t.created_at) : new Date(t.created_at).toLocaleString('id-ID')}</div>
+      </td>
+      <td style="font-weight:600;font-size:12px">${t.wallet_name||'-'}</td>
+      <td><span style="font-size:11px;padding:3px 8px;background:${bg};color:${col};border-radius:6px;font-weight:700">${label[t.type]||t.type}</span></td>
+      <td>
+        <div>${t.description||'-'}</div>
+        ${t.reference?`<div style="font-size:11px;color:#6b7280">Ref: ${t.reference}</div>`:''}
+      </td>
+      <td style="text-align:right;white-space:nowrap" class="tx-in">${isIn ? fmt.currency(t.amount) : '-'}</td>
+      <td style="text-align:right;white-space:nowrap" class="tx-out">${!isIn ? fmt.currency(Math.abs(t.amount)) : '-'}</td>
+      <td style="text-align:right;font-weight:800;font-family:ui-monospace,monospace;white-space:nowrap">${fmt.currency(t.balance_after)}</td>
+      <td style="font-size:12px;color:#6b7280">${t.operator_name||'-'}</td>
+      <td>${user?.role==='admin' && !['transfer_in','transfer_out'].includes(t.type) ? `<button class="btn-icon" onclick="revertTx(${t.id})" title="Batalkan transaksi" style="color:#dc2626">↩️</button>`:''}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="9" style="text-align:center;padding:30px;color:#6b7280">Belum ada transaksi</td></tr>';
+}
+
+function setTxQuick(range) {
+  const today = todayLocal();
+  const d = new Date();
+  let start = today;
+  if (range === 'today') { start = today; }
+  else if (range === 'week') { d.setDate(d.getDate()-6); start = (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')); }
+  else if (range === 'month') { start = today.slice(0,8)+'01'; }
+  document.getElementById('tx-start').value = start;
+  document.getElementById('tx-end').value = today;
+  loadAllTx();
+}
+
+// === NEW / EDIT ===
+function openNewWalletModal() {
+  document.getElementById('wallet-modal-title').textContent = 'Tambah Dompet Baru';
+  document.getElementById('w-edit-id').value = '';
+  document.getElementById('w-name').value = '';
+  if (document.getElementById('w-category').options.length) document.getElementById('w-category').selectedIndex = 0;
+  updateKindHint();
+  document.getElementById('w-branch').value = '';
+  document.getElementById('w-opening').value = '';
+  document.getElementById('w-notes').value = '';
+  document.getElementById('w-opening-group').style.display = '';
+  openModal('wallet-modal');
+}
+function openEditWalletModal(id) {
+  const w = allWallets.find(x=>x.id===id); if (!w) return;
+  document.getElementById('wallet-modal-title').textContent = 'Edit Dompet';
+  document.getElementById('w-edit-id').value = w.id;
+  document.getElementById('w-name').value = w.name;
+  if (w.category_id) document.getElementById('w-category').value = w.category_id;
+  updateKindHint();
+  document.getElementById('w-branch').value = w.branch_id || '';
+  document.getElementById('w-notes').value = w.notes || '';
+  document.getElementById('w-opening-group').style.display = 'none';
+  openModal('wallet-modal');
+}
+async function saveWallet() {
+  const id = document.getElementById('w-edit-id').value;
+  const data = {
+    name: document.getElementById('w-name').value.trim(),
+    category_id: document.getElementById('w-category').value ? parseInt(document.getElementById('w-category').value) : null,
+    branch_id: document.getElementById('w-branch').value ? parseInt(document.getElementById('w-branch').value) : null,
+    notes: document.getElementById('w-notes').value.trim() || null,
+    opening_balance: parseFloat(document.getElementById('w-opening').value) || 0
+  };
+  if (!data.name) return showToast('Nama wajib diisi','warning');
+  if (!data.category_id) return showToast('Pilih kategori dulu','warning');
+  try {
+    if (id) await API.put('/wallets/'+id, data); else await API.post('/wallets', data);
+    showToast('Dompet disimpan','success');
+    closeModal('wallet-modal');
+    await loadWallets();
+  } catch(e) { showToast(e.message,'error'); }
+}
+async function deleteWallet(id, name) {
+  confirmDialog(`Hapus dompet <strong>${name}</strong>?`, async()=>{
+    try {
+      const r = await API.delete('/wallets/'+id);
+      showToast(r.message,'success');
+      await loadWallets();
+    } catch(e) { showToast(e.message,'error'); }
+  }, 'Hapus Dompet');
+}
+
+// === KATEGORI DOMPET ===
+function openCategoryModal(){
+  document.getElementById('cat-edit-id').value='';
+  document.getElementById('cat-name').value='';
+  document.getElementById('cat-kind').value='asset';
+  document.getElementById('cat-icon').value='';
+  document.getElementById('cat-save-btn').textContent='Tambah';
+  renderCatList();
+  openModal('category-modal');
+}
+function renderCatList(){
+  const box=document.getElementById('cat-list');
+  if(!allCategories.length){ box.innerHTML='<div style="text-align:center;color:#6b7280;padding:14px;font-size:12px">Belum ada kategori</div>'; return; }
+  box.innerHTML = allCategories.map(c=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid #f3f4f6">
+    <span style="font-size:18px">${c.icon||'📦'}</span>
+    <div style="flex:1"><div style="font-weight:600;font-size:13px">${c.name}</div>
+      <div style="font-size:11px;color:${c.kind==='liability'?'#dc2626':'#059669'}">${c.kind==='liability'?'📕 Hutang':'💰 Aset'} · ${c.wallet_count||0} dompet</div></div>
+    <button class="btn-icon" title="Edit" onclick="editCategory(${c.id})">✏️</button>
+    <button class="btn-icon" title="Hapus" style="color:#dc2626" onclick="deleteCategory(${c.id},'${(c.name||'').replace(/'/g,'')}')">🗑️</button>
+  </div>`).join('');
+}
+function editCategory(id){
+  const c=allCategories.find(x=>x.id===id); if(!c)return;
+  document.getElementById('cat-edit-id').value=c.id;
+  document.getElementById('cat-name').value=c.name;
+  document.getElementById('cat-kind').value=c.kind;
+  document.getElementById('cat-icon').value=c.icon||'';
+  document.getElementById('cat-save-btn').textContent='Simpan';
+}
+async function saveCategory(){
+  const id=document.getElementById('cat-edit-id').value;
+  const body={ name:document.getElementById('cat-name').value.trim(), kind:document.getElementById('cat-kind').value, icon:document.getElementById('cat-icon').value.trim() };
+  if(!body.name) return showToast('Nama kategori wajib diisi','warning');
+  try{
+    if(id) await API.put('/wallets/categories/'+id, body); else await API.post('/wallets/categories', body);
+    showToast('Kategori disimpan','success');
+    document.getElementById('cat-edit-id').value=''; document.getElementById('cat-name').value=''; document.getElementById('cat-icon').value=''; document.getElementById('cat-save-btn').textContent='Tambah';
+    await loadWallets(); renderCatList();
+  }catch(e){ showToast(e.message,'error'); }
+}
+function deleteCategory(id,name){
+  confirmDialog(`Hapus kategori <strong>${name}</strong>?`, async()=>{
+    try{ const r=await API.delete('/wallets/categories/'+id); showToast(r.message,'success'); await loadWallets(); renderCatList(); }
+    catch(e){ showToast(e.message,'error'); }
+  }, 'Hapus Kategori');
+}
+
+// === TOPUP ===
+function openTopupModal(id) {
+  const w = allWallets.find(x=>x.id===id); if (!w) return;
+  document.getElementById('topup-title').textContent = isDebt(w) ? '➕ Tambah Hutang' : '➕ Tambah Saldo';
+  document.getElementById('t-wallet-id').value = id;
+  document.getElementById('t-wallet-name').value = w.name;
+  document.getElementById('t-amount').value = '';
+  document.getElementById('t-desc').value = '';
+  document.getElementById('t-ref').value = '';
+  openModal('topup-modal');
+}
+async function saveTopup() {
+  const id = document.getElementById('t-wallet-id').value;
+  const amount = parseFloat(document.getElementById('t-amount').value);
+  const description = document.getElementById('t-desc').value.trim();
+  const reference = document.getElementById('t-ref').value.trim() || null;
+  if (!amount || amount<=0) return showToast('Jumlah harus > 0','warning');
+  try {
+    const r = await API.post(`/wallets/${id}/topup`, {amount, description, reference});
+    showToast(r.message,'success');
+    closeModal('topup-modal');
+    await loadWallets();
+    if (document.getElementById('filter-wallet').value == id) await loadAllTx();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+// === WITHDRAW ===
+function openWithdrawModal(id) {
+  const w = allWallets.find(x=>x.id===id); if (!w) return;
+  document.getElementById('withdraw-title').textContent = isDebt(w) ? '➖ Bayar Hutang' : '➖ Kurangi Saldo';
+  document.getElementById('wd-wallet-id').value = id;
+  document.getElementById('wd-wallet-name').value = w.name;
+  document.getElementById('wd-balance').value = fmt.currency(w.current_balance);
+  document.getElementById('wd-amount').value = '';
+  document.getElementById('wd-desc').value = '';
+  document.getElementById('wd-ref').value = '';
+  openModal('withdraw-modal');
+}
+async function saveWithdraw() {
+  const id = document.getElementById('wd-wallet-id').value;
+  const amount = parseFloat(document.getElementById('wd-amount').value);
+  const description = document.getElementById('wd-desc').value.trim();
+  const reference = document.getElementById('wd-ref').value.trim() || null;
+  if (!amount || amount<=0) return showToast('Jumlah harus > 0','warning');
+  if (!description) return showToast('Keterangan wajib diisi','warning');
+  try {
+    const r = await API.post(`/wallets/${id}/withdraw`, {amount, description, reference});
+    showToast(r.message,'success');
+    closeModal('withdraw-modal');
+    await loadWallets();
+    if (document.getElementById('filter-wallet').value == id) await loadAllTx();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+// === ADJUST / REKONSILIASI ===
+function openAdjustModal(id) {
+  const w = allWallets.find(x=>x.id===id); if (!w) return;
+  document.getElementById('a-wallet-id').value = id;
+  document.getElementById('a-wallet-name').value = w.name;
+  document.getElementById('a-current').value = fmt.currency(w.current_balance);
+  document.getElementById('a-actual').value = w.current_balance;
+  document.getElementById('a-desc').value = '';
+  openModal('adjust-modal');
+}
+async function saveAdjust() {
+  const id = document.getElementById('a-wallet-id').value;
+  const new_balance = parseFloat(document.getElementById('a-actual').value);
+  const description = document.getElementById('a-desc').value.trim();
+  if (isNaN(new_balance) || new_balance<0) return showToast('Nilai tidak valid','warning');
+  if (!description) return showToast('Alasan wajib diisi','warning');
+  confirmDialog(`Set saldo menjadi <strong>${fmt.currency(new_balance)}</strong>?`, async()=>{
+    try {
+      const r = await API.post(`/wallets/${id}/adjust`, {new_balance, description});
+      showToast('Saldo direkonsiliasi','success');
+      closeModal('adjust-modal');
+      await loadWallets();
+      if (document.getElementById('filter-wallet').value == id) await loadAllTx();
+    } catch(e) { showToast(e.message,'error'); }
+  }, 'Konfirmasi Rekonsiliasi');
+}
+
+// === TRANSFER ===
+function openTransferModal(id) {
+  const w = allWallets.find(x=>x.id===id); if (!w) return;
+  document.getElementById('tr-from-id').value = id;
+  document.getElementById('tr-from-name').value = w.name + ' — ' + fmt.currency(w.current_balance);
+  const targets = allWallets.filter(x=>x.id!==id);
+  document.getElementById('tr-to').innerHTML = '<option value="">-- Pilih dompet tujuan --</option>' + targets.map(x=>`<option value="${x.id}">${isDebt(x)?'📕 '+x.name+' (bayar hutang)':x.name}</option>`).join('');
+  document.getElementById('tr-amount').value = '';
+  document.getElementById('tr-desc').value = '';
+  openModal('transfer-modal');
+}
+
+// === BAYAR HUTANG (dari dompet aset) ===
+function openPayDebtModal(debtId) {
+  const d = allWallets.find(x=>x.id===debtId); if (!d) return;
+  document.getElementById('pd-debt-id').value = debtId;
+  document.getElementById('pd-debt-name').value = d.name;
+  document.getElementById('pd-debt-remaining').value = fmt.currency(d.current_balance);
+  const sources = allWallets.filter(w=>!isDebt(w)); // hanya dompet aset
+  document.getElementById('pd-source').innerHTML = '<option value="">-- Pilih dompet sumber --</option>' +
+    sources.map(w=>`<option value="${w.id}">${catIcon(w)} ${w.name} (${fmt.currency(w.current_balance)})</option>`).join('');
+  document.getElementById('pd-amount').value = '';
+  document.getElementById('pd-desc').value = '';
+  openModal('paydebt-modal');
+}
+async function savePayDebt() {
+  const debtId = parseInt(document.getElementById('pd-debt-id').value);
+  const sourceId = parseInt(document.getElementById('pd-source').value);
+  const amount = parseFloat(document.getElementById('pd-amount').value);
+  const description = document.getElementById('pd-desc').value.trim();
+  if (!sourceId) return showToast('Pilih dompet sumber dulu','warning');
+  if (!amount || amount<=0) return showToast('Jumlah bayar harus > 0','warning');
+  try {
+    // transfer dari dompet sumber → dompet hutang (backend otomatis mengurangi hutang)
+    const r = await API.post(`/wallets/${sourceId}/transfer`, { to_wallet_id: debtId, amount, description });
+    showToast(r.message || 'Hutang dibayar','success');
+    closeModal('paydebt-modal');
+    await loadWallets();
+    await loadAllTx();
+  } catch(e) { showToast(e.message,'error'); }
+}
+async function saveTransfer() {
+  const id = document.getElementById('tr-from-id').value;
+  const to_wallet_id = parseInt(document.getElementById('tr-to').value);
+  const amount = parseFloat(document.getElementById('tr-amount').value);
+  const description = document.getElementById('tr-desc').value.trim();
+  if (!to_wallet_id) return showToast('Pilih dompet tujuan','warning');
+  if (!amount || amount<=0) return showToast('Jumlah harus > 0','warning');
+  try {
+    const r = await API.post(`/wallets/${id}/transfer`, {to_wallet_id, amount, description});
+    showToast(r.message,'success');
+    closeModal('transfer-modal');
+    await loadWallets();
+    await loadAllTx();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+async function revertTx(txId) {
+  confirmDialog('Batalkan transaksi ini? Saldo akan dikembalikan ke keadaan semula.', async()=>{
+    try {
+      await API.delete('/wallets/transactions/'+txId);
+      showToast('Transaksi dibatalkan','success');
+      await loadWallets();
+      await loadAllTx();
+    } catch(e) { showToast(e.message,'error'); }
+  }, 'Batalkan Transaksi');
+}
+
+loadAll();
+
+
+/* Ekspor dompet: saldo tiap dompet + mutasi yang sedang tampil. */
+function exportExcel(btn) {
+  if (!allWallets.length) return showToast('Belum ada data untuk diekspor','warning');
+  const sheets = [{
+    name:'Saldo Dompet', title:'Dompet & Kas Kecil \u2014 Ujang Kedu', meta: excelMeta(),
+    columns:[
+      {header:'Dompet',key:'nama',width:28},{header:'Kategori',key:'kategori'},{header:'Jenis',key:'jenis'},
+      {header:'Cabang',key:'cabang'},{header:'Saldo (Rp)',key:'saldo',type:'money'},{header:'Catatan',key:'catatan',width:32}],
+    rows: allWallets.map(w => ({ nama:w.name, kategori:w.category_name||'-',
+      jenis:(w.kind==='liability'?'Hutang':'Aset'), cabang:w.branch_name||'Semua / Pusat',
+      saldo:w.current_balance||0, catatan:w.notes||'-' })),
+    totals: { nama:'TOTAL ASET', saldo: allWallets.filter(w=>w.kind!=='liability').reduce((a,w)=>a+(w.current_balance||0),0) },
+  }];
+  if (lastTx && lastTx.length) {
+    sheets.push({
+      name:'Mutasi', title:'Mutasi Dompet', meta: excelMeta([['Jumlah baris', lastTx.length]]),
+      columns:[
+        {header:'Waktu',key:'waktu',type:'datetime'},{header:'Dompet',key:'dompet'},{header:'Jenis',key:'jenis'},
+        {header:'Keterangan',key:'ket',width:36},{header:'Referensi',key:'ref'},
+        {header:'Masuk (Rp)',key:'masuk',type:'money'},{header:'Keluar (Rp)',key:'keluar',type:'money'},
+        {header:'Saldo Setelah (Rp)',key:'saldo',type:'money'}],
+      rows: lastTx.map(t => ({ waktu:t.created_at, dompet:t.wallet_name||'-', jenis:t.type,
+        ket:t.description||'-', ref:t.reference||'-',
+        masuk:t.amount>0?t.amount:null, keluar:t.amount<0?Math.abs(t.amount):null, saldo:t.balance_after })),
+    });
+  }
+  downloadExcel({ filename:'dompet-kas-' + getToday(), sheets }, btn);
+}
+</script>
+</body>
+</html>

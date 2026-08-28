@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pelanggan — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.top-cust-card { background:white; border:1px solid #e5e7eb; border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+.top-cust-rank { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:15px; flex-shrink:0; }
+.rank-1 { background:linear-gradient(135deg,#fde68a,#f59e0b); color:#78350f; }
+.rank-2 { background:linear-gradient(135deg,#e5e7eb,#9ca3af); color:#1f2937; }
+.rank-3 { background:linear-gradient(135deg,#fed7aa,#f97316); color:#7c2d12; }
+.rank-x { background:#eef2ff; color:#4338ca; }
+.cust-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.cust-tbl th { background:#f8fafc; padding:10px 14px; text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; border-bottom:1px solid #e5e7eb; font-weight:700; }
+.cust-tbl td { padding:11px 14px; border-bottom:1px solid #f1f5f9; }
+</style>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">👥 Pelanggan</div><div class="page-subtitle">Database pelanggan & analitik pembeli</div></div>
+    <div class="top-bar-actions">
+      <button class="btn btn-secondary" onclick="exportExcel(this)">📗 Excel</button>
+      <button class="btn btn-primary" onclick="openAddModal()">+ Tambah Pelanggan</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <!-- Top pembeli -->
+    <div class="card mb-4">
+      <div class="card-header" style="flex-wrap:wrap;gap:10px">
+        <span class="card-title">🏆 Top Pembeli</span>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input type="date" id="an-start" class="form-control" style="width:140px">
+          <span style="color:#6b7280">—</span>
+          <input type="date" id="an-end" class="form-control" style="width:140px">
+          <button class="btn btn-secondary btn-sm" onclick="setAnQuick('week')">7 Hari</button>
+          <button class="btn btn-secondary btn-sm" onclick="setAnQuick('month')">Bulan Ini</button>
+          <button class="btn btn-secondary btn-sm" onclick="setAnQuick('all')">Semua</button>
+          <button class="btn btn-primary btn-sm" onclick="loadTop()">🔄</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="top-cust-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px"></div>
+      </div>
+    </div>
+
+    <!-- Semua pelanggan -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📋 Semua Pelanggan</span>
+        <input type="text" id="search-cust" class="form-control" placeholder="🔍 Cari..." style="width:220px" oninput="renderList()">
+      </div>
+      <div class="table-wrapper">
+        <table class="cust-tbl">
+          <thead>
+            <tr><th>Nama</th><th>Telepon</th><th>Email</th><th style="text-align:right">Order</th><th style="text-align:right">Total Belanja</th><th style="text-align:right">Rata²</th><th>Terakhir</th><th>Aksi</th></tr>
+          </thead>
+          <tbody id="cust-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Add/Edit -->
+<div class="modal-overlay" id="cust-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title" id="cust-modal-title">Tambah Pelanggan</span><button class="modal-close" onclick="closeModal('cust-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="c-edit-id">
+      <div class="form-group"><label class="form-label">Nama *</label><input type="text" id="c-name" class="form-control"></div>
+      <div class="form-group"><label class="form-label">Telepon</label><input type="text" id="c-phone" class="form-control" placeholder="08xx..."></div>
+      <div class="form-group"><label class="form-label">Email</label><input type="email" id="c-email" class="form-control"></div>
+      <div class="form-group"><label class="form-label">Alamat</label><textarea id="c-address" class="form-control" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('cust-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="saveCust()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+initPage('customers','Pelanggan','Database & analitik');
+let allCustomers = [];
+
+async function loadAll() {
+  try {
+    allCustomers = await API.get('/customers?with_stats=1');
+    renderList();
+    loadTop();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+function renderList() {
+  const q = document.getElementById('search-cust').value.toLowerCase();
+  const list = allCustomers.filter(c => !q || (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q));
+  document.getElementById('cust-tbody').innerHTML = list.map(c => `
+    <tr>
+      <td><div style="font-weight:600">${c.name}</div>${c.address?`<div style="font-size:11px;color:#6b7280">${c.address}</div>`:''}</td>
+      <td style="font-family:ui-monospace,monospace">${c.phone||'-'}</td>
+      <td style="font-size:12px;color:#6b7280">${c.email||'-'}</td>
+      <td style="text-align:right;font-weight:700">${c.total_orders||0}</td>
+      <td style="text-align:right;font-weight:700;color:#059669;white-space:nowrap">${fmt.currency(c.total_spent||0)}</td>
+      <td style="text-align:right;font-size:12px;color:#6b7280;white-space:nowrap">${fmt.currency(c.avg_order||0)}</td>
+      <td style="font-size:12px;color:#6b7280">${c.last_order_at ? fmt.date(c.last_order_at) : '-'}</td>
+      <td>
+        <button class="btn-icon" onclick="openEditModal(${c.id})" title="Edit">✏️</button>
+        ${c.id > 1 ? `<button class="btn-icon" onclick="deleteCust(${c.id},'${c.name.replace(/'/g,"\\'")}')" title="Hapus" style="color:#ef4444">🗑️</button>`:''}
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="8" style="text-align:center;padding:30px;color:#9ca3af">Belum ada pelanggan</td></tr>';
+}
+
+async function loadTop() {
+  const s = document.getElementById('an-start').value;
+  const e = document.getElementById('an-end').value;
+  const params = new URLSearchParams({limit:'8'});
+  if (s) params.set('start_date', s);
+  if (e) params.set('end_date', e);
+  const top = await API.get('/customers/analytics/top?'+params.toString());
+  document.getElementById('top-cust-grid').innerHTML = top.length ? top.map((c,i)=>{
+    const rank = i+1;
+    const rankCls = rank<=3 ? `rank-${rank}` : 'rank-x';
+    return `<div class="top-cust-card">
+      <div class="top-cust-rank ${rankCls}">${rank<=3?['🥇','🥈','🥉'][rank-1]:'#'+rank}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:14px">${c.name}</div>
+        <div style="font-size:11px;color:#6b7280;font-family:ui-monospace,monospace">${c.phone||'—'}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:800;font-size:15px;color:#4f46e5">${c.total_orders}×</div>
+        <div style="font-size:11px;color:#059669;font-weight:700">${fmt.currency(c.total_spent)}</div>
+      </div>
+    </div>`;
+  }).join('') : '<div style="grid-column:1/-1;padding:30px;text-align:center;color:#9ca3af">Belum ada data pembelian pada periode ini</div>';
+}
+
+function setAnQuick(range) {
+  const today = todayLocal();
+  const d = new Date();
+  let start = '';
+  if (range === 'week') { d.setDate(d.getDate()-6); start = (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')); }
+  else if (range === 'month') { start = today.slice(0,8)+'01'; }
+  else if (range === 'all') { start = ''; }
+  document.getElementById('an-start').value = start;
+  document.getElementById('an-end').value = range==='all' ? '' : today;
+  loadTop();
+}
+
+function openAddModal() {
+  document.getElementById('cust-modal-title').textContent = 'Tambah Pelanggan';
+  document.getElementById('c-edit-id').value = '';
+  ['c-name','c-phone','c-email','c-address'].forEach(id=>document.getElementById(id).value='');
+  openModal('cust-modal');
+}
+function openEditModal(id) {
+  const c = allCustomers.find(x=>x.id===id); if (!c) return;
+  document.getElementById('cust-modal-title').textContent = 'Edit Pelanggan';
+  document.getElementById('c-edit-id').value = c.id;
+  document.getElementById('c-name').value = c.name;
+  document.getElementById('c-phone').value = c.phone||'';
+  document.getElementById('c-email').value = c.email||'';
+  document.getElementById('c-address').value = c.address||'';
+  openModal('cust-modal');
+}
+async function saveCust() {
+  const id = document.getElementById('c-edit-id').value;
+  const data = {
+    name: document.getElementById('c-name').value.trim(),
+    phone: document.getElementById('c-phone').value.trim(),
+    email: document.getElementById('c-email').value.trim(),
+    address: document.getElementById('c-address').value.trim(),
+  };
+  if (!data.name) return showToast('Nama wajib diisi','warning');
+  try {
+    if (id) await API.put('/customers/'+id, data); else await API.post('/customers', data);
+    showToast('Pelanggan disimpan','success');
+    closeModal('cust-modal');
+    await loadAll();
+  } catch(e) { showToast(e.message,'error'); }
+}
+async function deleteCust(id, name) {
+  confirmDialog(`Hapus pelanggan <strong>${name}</strong>?`, async()=>{
+    try { await API.delete('/customers/'+id); showToast('Pelanggan dihapus','success'); await loadAll(); }
+    catch(e) { showToast(e.message,'error'); }
+  }, 'Hapus Pelanggan');
+}
+
+function exportExcel(btn) {
+  if (!allCustomers.length) return showToast('Belum ada data untuk diekspor','warning');
+  downloadExcel({
+    filename: 'pelanggan-' + getToday(),
+    sheets: [{
+      name: 'Pelanggan',
+      title: 'Daftar Pelanggan \u2014 Ujang Kedu',
+      meta: excelMeta([['Jumlah pelanggan', allCustomers.length]]),
+      columns: [
+        { header:'Nama', key:'nama', width:26 },
+        { header:'Telepon', key:'telp' },
+        { header:'Email', key:'email', width:26 },
+        { header:'Alamat', key:'alamat', width:34 },
+        { header:'Total Order', key:'order', type:'number' },
+        { header:'Total Belanja (Rp)', key:'belanja', type:'money' },
+        { header:'Rata-rata / Order (Rp)', key:'rata', type:'money' },
+        { header:'Order Terakhir', key:'terakhir', type:'datetime' },
+      ],
+      rows: allCustomers.map(c => ({
+        nama:c.name||'-', telp:c.phone||'-', email:c.email||'-', alamat:c.address||'-',
+        order:c.total_orders||0, belanja:c.total_spent||0, rata:Math.round(c.avg_order||0), terakhir:c.last_order_at,
+      })),
+      totals: { nama:'TOTAL', order: allCustomers.reduce((a,c)=>a+(c.total_orders||0),0),
+                belanja: allCustomers.reduce((a,c)=>a+(c.total_spent||0),0) },
+    }],
+  }, btn);
+}
+
+loadAll();
+</script>
+</body>
+</html>

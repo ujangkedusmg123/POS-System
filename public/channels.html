@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kelola Channel Penjualan — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">📡 Kelola Channel Penjualan</div><div class="page-subtitle">Tambah/edit sumber pesanan (Langsung, GoFood, Shopee, dll)</div></div>
+    <div class="top-bar-actions">
+      <button class="btn btn-primary" onclick="openAdd()">+ Tambah Channel</button>
+    </div>
+  </div>
+  <div class="page-content">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Daftar Channel</span></div>
+      <div class="table-wrapper">
+        <table class="table">
+          <thead><tr><th>Urutan</th><th>Warna</th><th>Nama</th><th>Kode</th><th>Status</th><th>Aksi</th></tr></thead>
+          <tbody id="ch-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="ch-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title" id="ch-title">Tambah Channel</span><button class="modal-close" onclick="closeModal('ch-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="ch-id">
+      <div class="form-group"><label class="form-label">Nama Channel *</label><input type="text" id="ch-name" class="form-control" placeholder="Misal: TikTok Shop"></div>
+      <div class="form-group"><label class="form-label">Kode (unik) *</label><input type="text" id="ch-code" class="form-control" placeholder="misal: tiktok" style="font-family:ui-monospace,monospace"><div style="font-size:11px;color:#6b7280;margin-top:4px">Hanya huruf kecil, angka, dan underscore. Tidak bisa diubah.</div></div>
+      <div class="form-group"><label class="form-label">Warna Badge</label><input type="color" id="ch-color" class="form-control" style="height:42px;padding:4px" value="#6b7280"></div>
+      <div class="form-group"><label class="form-label">Urutan Tampil</label><input type="number" id="ch-order" class="form-control" placeholder="0" value="10"></div>
+      <div class="form-group" id="ch-active-group" style="display:none">
+        <label class="form-label">Status</label>
+        <select id="ch-active" class="form-control"><option value="1">Aktif</option><option value="0">Nonaktif</option></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('ch-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="saveChannel()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+initPage('channels','Channel','Sumber pesanan');
+let allChannels = [];
+
+async function loadAll() {
+  try {
+    allChannels = await API.get('/channels');
+    render();
+  } catch(e) { showToast(e.message,'error'); }
+}
+function render() {
+  document.getElementById('ch-tbody').innerHTML = allChannels.map(c => `
+    <tr style="${!c.is_active?'opacity:0.5':''}">
+      <td style="font-weight:700">${c.sort_order}</td>
+      <td><span style="display:inline-block;width:22px;height:22px;border-radius:6px;background:${c.color};border:1px solid #e5e7eb"></span></td>
+      <td><span class="badge" style="background:${c.color}22;color:${c.color};font-weight:700">${c.name}</span></td>
+      <td style="font-family:ui-monospace,monospace;font-size:12px;color:#6b7280">${c.code}</td>
+      <td><span class="badge ${c.is_active?'badge-success':'badge-danger'}">${c.is_active?'Aktif':'Nonaktif'}</span></td>
+      <td>
+        <button class="btn-icon" onclick="openEdit(${c.id})" title="Edit">✏️</button>
+        <button class="btn-icon" onclick="del(${c.id},'${c.name.replace(/'/g,"\\'")}')" title="Hapus" style="color:#ef4444">🗑️</button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="6" style="text-align:center;padding:30px;color:#9ca3af">Belum ada channel</td></tr>';
+}
+function openAdd() {
+  document.getElementById('ch-title').textContent = 'Tambah Channel';
+  document.getElementById('ch-id').value = '';
+  document.getElementById('ch-name').value = '';
+  document.getElementById('ch-code').value = '';
+  document.getElementById('ch-code').disabled = false;
+  document.getElementById('ch-color').value = '#6b7280';
+  document.getElementById('ch-order').value = 10;
+  document.getElementById('ch-active-group').style.display = 'none';
+  openModal('ch-modal');
+}
+function openEdit(id) {
+  const c = allChannels.find(x=>x.id===id); if (!c) return;
+  document.getElementById('ch-title').textContent = 'Edit Channel';
+  document.getElementById('ch-id').value = c.id;
+  document.getElementById('ch-name').value = c.name;
+  document.getElementById('ch-code').value = c.code;
+  document.getElementById('ch-code').disabled = true;
+  document.getElementById('ch-color').value = c.color;
+  document.getElementById('ch-order').value = c.sort_order;
+  document.getElementById('ch-active').value = c.is_active;
+  document.getElementById('ch-active-group').style.display = '';
+  openModal('ch-modal');
+}
+async function saveChannel() {
+  const id = document.getElementById('ch-id').value;
+  const data = {
+    name: document.getElementById('ch-name').value.trim(),
+    code: document.getElementById('ch-code').value.trim(),
+    color: document.getElementById('ch-color').value,
+    sort_order: parseInt(document.getElementById('ch-order').value) || 0,
+  };
+  if (id) data.is_active = parseInt(document.getElementById('ch-active').value);
+  if (!data.name || !data.code) return showToast('Nama & kode wajib diisi','warning');
+  try {
+    if (id) await API.put('/channels/'+id, data); else await API.post('/channels', data);
+    showToast('Channel disimpan','success'); closeModal('ch-modal'); await loadAll();
+  } catch(e) { showToast(e.message,'error'); }
+}
+async function del(id, name) {
+  confirmDialog(`Hapus channel <strong>${name}</strong>?`, async()=>{
+    try { const r = await API.delete('/channels/'+id); showToast(r.message,'success'); await loadAll(); }
+    catch(e) { showToast(e.message,'error'); }
+  }, 'Hapus Channel');
+}
+loadAll();
+</script>
+</body>
+</html>

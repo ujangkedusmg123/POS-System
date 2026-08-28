@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Termin Pembayaran — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.pm-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+.pm-card { border:1.5px solid var(--border); border-radius:12px; padding:15px; background:#fff; position:relative; }
+.pm-card.off { opacity:.55; background:var(--bg-light); }
+.pm-head { display:flex; align-items:center; gap:11px; margin-bottom:10px; }
+.pm-icon { font-size:26px; width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:var(--bg-light); border-radius:11px; flex-shrink:0; }
+.pm-name { font-weight:700; font-size:15px; }
+.pm-code { font-size:11px; color:var(--text-muted); font-family:ui-monospace,monospace; }
+.pm-tags { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:11px; }
+.pm-tag { font-size:10.5px; font-weight:600; padding:3px 8px; border-radius:20px; background:var(--bg-light); color:var(--text-secondary); }
+.pm-tag.blue { background:#eff6ff; color:#1d4ed8; }
+.pm-tag.green { background:#ecfdf5; color:#047857; }
+.pm-tag.amber { background:#fffbeb; color:#b45309; }
+@media (max-width:600px){ .pm-grid{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">💳 Termin Pembayaran</div><div class="page-subtitle">Kelola metode & termin pembayaran POS</div></div>
+    <div class="top-bar-actions">
+      <button class="btn btn-primary" data-perm="settings.payment" onclick="openPm()">+ Metode Baru</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:13px;color:#1e40af;line-height:1.6">
+      💡 <b>Masuk laci kasir</b> menentukan apakah nominal metode ini ikut dihitung saat Tutup Kasir. Tunai biasanya ya; QRIS/transfer tidak, karena uangnya tidak berbentuk fisik di laci.
+    </div>
+    <div class="pm-grid" id="pm-grid"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="pm-modal">
+  <div class="modal-box" style="max-width:560px">
+    <div class="modal-header"><span class="modal-title" id="pm-title">Metode Baru</span>
+      <span onclick="closeModal('pm-modal')" style="cursor:pointer;font-size:20px;margin-left:auto">✕</span></div>
+    <div class="modal-body">
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Nama Metode *</label>
+          <input type="text" id="p-name" class="form-control" placeholder="mis. GoPay"></div>
+        <div class="form-group"><label class="form-label">Ikon</label>
+          <input type="text" id="p-icon" class="form-control" placeholder="💳" maxlength="4"></div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Jenis</label>
+          <select id="p-kind" class="form-control">
+            <option value="cash">Tunai (uang fisik)</option>
+            <option value="cashless">Non-tunai (QRIS/transfer/kartu)</option>
+            <option value="credit">Piutang / Tempo</option>
+          </select></div>
+        <div class="form-group"><label class="form-label">Biaya Admin (%)</label>
+          <input type="number" id="p-fee" class="form-control" step="0.1" min="0" max="100" value="0"></div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group"><label class="form-label">Termin Jatuh Tempo (hari)</label>
+          <input type="number" id="p-term" class="form-control" min="0" value="0">
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">0 = bayar langsung saat transaksi</div></div>
+        <div class="form-group"><label class="form-label">Urutan Tampil</label>
+          <input type="number" id="p-sort" class="form-control" value="0"></div>
+      </div>
+      <div style="display:grid;gap:9px;margin-top:6px;padding:13px;background:var(--bg-light);border-radius:10px">
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+          <input type="checkbox" id="p-drawer" style="width:17px;height:17px;margin-top:2px">
+          <span style="font-size:13px;line-height:1.4"><b>Masuk laci kasir</b><br>
+            <span style="color:var(--text-muted);font-size:11.5px">Ikut dihitung sebagai uang fisik saat Tutup Kasir</span></span></label>
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+          <input type="checkbox" id="p-change" style="width:17px;height:17px;margin-top:2px">
+          <span style="font-size:13px;line-height:1.4"><b>Boleh ada kembalian</b><br>
+            <span style="color:var(--text-muted);font-size:11.5px">Kalau dimatikan, sistem menganggap dibayar pas</span></span></label>
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+          <input type="checkbox" id="p-ref" style="width:17px;height:17px;margin-top:2px">
+          <span style="font-size:13px;line-height:1.4"><b>Wajib nomor referensi</b><br>
+            <span style="color:var(--text-muted);font-size:11.5px">Kasir harus mengisi no. approval/transfer</span></span></label>
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+          <input type="checkbox" id="p-active" checked style="width:17px;height:17px;margin-top:2px">
+          <span style="font-size:13px;line-height:1.4"><b>Aktif</b><br>
+            <span style="color:var(--text-muted);font-size:11.5px">Tampil sebagai pilihan di halaman kasir</span></span></label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('pm-modal')">Batal</button>
+      <button class="btn btn-primary" id="pm-save" onclick="savePm()">💾 Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+/* CATATAN PENTING — jangan bungkus ulang script ini dengan `if (...) { ... }`.
+   Deklarasi `async function` di dalam sebuah blok TIDAK terangkat ke scope
+   global (berbeda dengan `function` biasa yang terangkat lewat aturan warisan
+   Annex B). Kalau seluruh script dibungkus blok, atribut onclick pada tombol
+   tidak menemukan handler async-nya dan seluruh tombol menjadi mati.
+   Karena itu isi script berada di scope global, dan hanya baris bootstrap di
+   bagian bawah yang dijaga oleh PAGE_OK. */
+const PAGE_OK = initPage('payment-methods','Termin Pembayaran','Kelola metode & termin pembayaran');
+
+
+let methods = [], editingId = null;
+const esc = v => String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+async function load() {
+  try { methods = await API.get('/payment-methods?all=1'); render(); }
+  catch(e) { showToast(e.message,'error'); }
+}
+
+function render() {
+  const canEdit = Perms.can('settings.payment');
+  document.getElementById('pm-grid').innerHTML = methods.map(m => {
+    const tags = [];
+    tags.push(`<span class="pm-tag ${m.kind==='cash'?'green':m.kind==='credit'?'amber':'blue'}">${m.kind==='cash'?'Tunai':m.kind==='credit'?'Piutang':'Non-tunai'}</span>`);
+    if (m.counted_in_drawer) tags.push('<span class="pm-tag green">Masuk laci</span>');
+    if (m.gives_change) tags.push('<span class="pm-tag">Ada kembalian</span>');
+    if (m.needs_reference) tags.push('<span class="pm-tag amber">Wajib referensi</span>');
+    if (m.fee_percent > 0) tags.push(`<span class="pm-tag">Fee ${m.fee_percent}%</span>`);
+    if (m.term_days > 0) tags.push(`<span class="pm-tag amber">Tempo ${m.term_days} hari</span>`);
+    if (!m.is_active) tags.push('<span class="pm-tag">Nonaktif</span>');
+    return `<div class="pm-card ${m.is_active?'':'off'}">
+      <div class="pm-head"><div class="pm-icon">${esc(m.icon||'💳')}</div>
+        <div><div class="pm-name">${esc(m.name)}</div><div class="pm-code">${esc(m.code)}</div></div></div>
+      <div class="pm-tags">${tags.join('')}</div>
+      ${canEdit ? `<div style="display:flex;gap:6px">
+        <button class="btn btn-secondary btn-sm" onclick="openPm(${m.id})">✏️ Ubah</button>
+        ${m.code!=='cash' ? `<button class="btn btn-secondary btn-sm" style="color:var(--danger)" onclick="delPm(${m.id})">🗑️</button>` : ''}
+      </div>` : ''}
+    </div>`;
+  }).join('') || '<p class="text-muted">Belum ada metode pembayaran.</p>';
+}
+
+function openPm(id) {
+  editingId = id || null;
+  const m = id ? methods.find(x => x.id === id) : null;
+  document.getElementById('pm-title').textContent = m ? ('Ubah: ' + m.name) : 'Metode Baru';
+  document.getElementById('p-name').value = m ? m.name : '';
+  document.getElementById('p-icon').value = m ? (m.icon||'💳') : '💳';
+  document.getElementById('p-kind').value = m ? m.kind : 'cashless';
+  document.getElementById('p-fee').value = m ? m.fee_percent : 0;
+  document.getElementById('p-term').value = m ? m.term_days : 0;
+  document.getElementById('p-sort').value = m ? m.sort_order : methods.length + 1;
+  document.getElementById('p-drawer').checked = m ? !!m.counted_in_drawer : false;
+  document.getElementById('p-change').checked = m ? !!m.gives_change : false;
+  document.getElementById('p-ref').checked = m ? !!m.needs_reference : false;
+  document.getElementById('p-active').checked = m ? !!m.is_active : true;
+  openModal('pm-modal');
+}
+
+// Bantu user: memilih jenis "Tunai" otomatis mengaktifkan laci & kembalian
+document.getElementById('p-kind').addEventListener('change', function(){
+  if (this.value === 'cash') {
+    document.getElementById('p-drawer').checked = true;
+    document.getElementById('p-change').checked = true;
+  }
+});
+
+async function savePm() {
+  const name = document.getElementById('p-name').value.trim();
+  if (!name) return showToast('Nama metode wajib diisi','warning');
+  const body = {
+    name, icon: document.getElementById('p-icon').value.trim() || '💳',
+    kind: document.getElementById('p-kind').value,
+    fee_percent: parseFloat(document.getElementById('p-fee').value)||0,
+    term_days: parseInt(document.getElementById('p-term').value)||0,
+    sort_order: parseInt(document.getElementById('p-sort').value)||0,
+    counted_in_drawer: document.getElementById('p-drawer').checked,
+    gives_change: document.getElementById('p-change').checked,
+    needs_reference: document.getElementById('p-ref').checked,
+    is_active: document.getElementById('p-active').checked,
+  };
+  const btn = document.getElementById('pm-save'); btn.disabled = true;
+  try {
+    if (editingId) await API.put('/payment-methods/'+editingId, body);
+    else await API.post('/payment-methods', body);
+    showToast('Metode pembayaran tersimpan ✅','success');
+    closeModal('pm-modal'); load();
+  } catch(e) { showToast(e.message,'error'); }
+  btn.disabled = false;
+}
+
+function delPm(id) {
+  const m = methods.find(x => x.id === id);
+  confirmDialog(`Hapus metode <b>${esc(m.name)}</b>?<br><span style="font-size:12px;color:#6b7280">Kalau sudah dipakai transaksi, metode akan dinonaktifkan agar laporan lama tetap utuh.</span>`,
+    async () => {
+      try { const r = await API.delete('/payment-methods/'+id); showToast(r.message||'Dihapus','success',5000); load(); }
+      catch(e) { showToast(e.message,'error'); }
+    }, 'Hapus Metode');
+}
+
+if (PAGE_OK) {
+  load();
+}
+</script>
+</body>
+</html>

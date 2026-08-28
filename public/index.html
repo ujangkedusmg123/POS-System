@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><span onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:18px;color:var(--sidebar-text)">🚪</span></div></div></aside>
+<div id="main-content">
+  <div class="top-bar">
+    <div style="flex:1;min-width:0">
+      <div class="page-title">📊 Dashboard</div>
+      <div class="page-subtitle" id="page-subtitle"></div>
+    </div>
+    <div class="top-bar-actions">
+      <select id="dash-branch" class="form-control" style="width:170px;display:none" onchange="loadDashboard()">
+        <option value="">Semua Cabang</option>
+      </select>
+      <a href="/pos.html" class="btn btn-primary" style="background:#059669;border-color:#059669">🛒 Buka Kasir</a>
+    </div>
+  </div>
+
+  <!-- Filter tanggal — baris terpisah supaya rapi -->
+  <div style="padding:14px 24px;background:white;border-bottom:1px solid #e5e7eb;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <span style="font-size:12px;font-weight:700;color:#6b7280;margin-right:6px">📅 PERIODE:</span>
+    <button class="btn btn-secondary btn-sm" onclick="setQuickDash('today')">Hari Ini</button>
+    <button class="btn btn-secondary btn-sm" onclick="setQuickDash('week')">7 Hari</button>
+    <button class="btn btn-secondary btn-sm active-preset" id="preset-month" onclick="setQuickDash('month')">Bulan Ini</button>
+    <button class="btn btn-secondary btn-sm" onclick="setQuickDash('lastmonth')">Bulan Lalu</button>
+    <button class="btn btn-secondary btn-sm" onclick="setQuickDash('30')">30 Hari</button>
+    <span style="width:1px;height:24px;background:#e5e7eb;margin:0 4px"></span>
+    <input type="date" id="dash-start" class="form-control" style="width:150px">
+    <span style="color:#6b7280;font-size:12px">—</span>
+    <input type="date" id="dash-end" class="form-control" style="width:150px">
+    <button class="btn btn-primary btn-sm" onclick="loadDashboard()">📊 Tampilkan</button>
+  </div>
+
+  <div class="page-content">
+    <!-- KPI Hari Ini -->
+    <div class="grid-4 mb-4" id="kpi-today"></div>
+    <!-- KPI Periode -->
+    <div class="grid-4 mb-4" id="kpi-period"></div>
+
+    <!-- Charts Row -->
+    <div class="grid-2 mb-4">
+      <div class="card">
+        <div class="card-header"><span class="card-title">📈 Penjualan 7 Hari Terakhir</span></div>
+        <div class="card-body"><div class="chart-container"><canvas id="salesChart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">⏰ Penjualan Per Jam (Hari Ini)</span></div>
+        <div class="card-body"><div class="chart-container"><canvas id="hourlyChart"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- Best Products + Payment + P&L -->
+    <div class="grid-3 mb-4">
+      <div class="card">
+        <div class="card-header"><span class="card-title">🏆 Produk Terlaris</span></div>
+        <div class="card-body" id="best-products-container"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">💳 Metode Pembayaran</span></div>
+        <div class="card-body"><div style="height:180px"><canvas id="paymentChart"></canvas></div><div id="channel-breakdown" style="margin-top:10px"></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">📋 Laporan L/R Periode</span></div>
+        <div class="card-body" id="pl-summary"></div>
+      </div>
+    </div>
+
+    <!-- Recent Transactions -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">🕐 Transaksi Terakhir</span></div>
+      <div class="table-wrapper">
+        <table class="table">
+          <thead><tr><th>Invoice</th><th>Pelanggan</th><th>Kasir</th><th>Cabang</th><th>Total</th><th>Bayar</th><th>Waktu</th></tr></thead>
+          <tbody id="recent-sales-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+// Kasir tidak perlu dashboard, langsung ke POS
+// Gerbang halaman ditangani initPage() berdasarkan hak akses. Pemeriksaan
+// "harus admin" yang lama dihapus karena menendang keluar peran sah lain
+// (supervisor, tim produksi, runner) yang justru diberi izin untuk halaman ini.
+initPage('dashboard','Dashboard','');
+document.getElementById('page-subtitle').textContent = 'Selamat datang, ' + (Auth.getUser()?.full_name||'') + ' 👋';
+
+let salesChart, hourlyChart, paymentChart;
+
+function getStart() { return document.getElementById('dash-start').value || getMonthStart(); }
+function getEnd()   { return document.getElementById('dash-end').value   || getToday(); }
+
+function setQuickDash(period) {
+  const today = getToday();
+  const s = document.getElementById('dash-start');
+  const e = document.getElementById('dash-end');
+  if (period==='today') { s.value=today; e.value=today; }
+  else if (period==='week') { s.value=daysAgoLocal(6);e.value=today; }
+  else if (period==='month') { s.value=getMonthStart(); e.value=today; }
+  else if (period==='30') { s.value=daysAgoLocal(29);e.value=today; }
+  else if (period==='lastmonth') {
+    const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-1);
+    s.value=ymdWib(d);
+    e.value=ymdWib(new Date(d.getFullYear(),d.getMonth()+1,0));
+  }
+  loadDashboard();
+}
+
+async function initDashFilters() {
+  if (Auth.getUser()?.role==='admin') {
+    try {
+      const branches = await API.get('/branches');
+      const sel = document.getElementById('dash-branch');
+      sel.style.display='';
+      branches.filter(b=>b.is_active).forEach(b=>{
+        const o=document.createElement('option');o.value=b.id;o.textContent=b.name;sel.appendChild(o);
+      });
+    } catch(e) {}
+  }
+}
+
+async function loadDashboard() {
+  const start = getStart(), end = getEnd();
+  try {
+    const branchId = document.getElementById('dash-branch')?.value||'';
+    const todayLocal = getToday(); // client's local date
+    const params = new URLSearchParams({
+      start_date: start, end_date: end, today: todayLocal, tz_offset: '+7 hours',
+    });
+    if (branchId) params.set('branch_id', branchId);
+    const data = await API.get('/reports/dashboard?'+params.toString());
+    // Store branch selection
+    window._dashBranchId = branchId;
+    if (!data || data.error) { showToast('Gagal: '+(data?.error||'Unknown error'),'error'); return; }
+    renderKPIToday(data.summary?.today||{});  // juga load info stok
+    renderKPIPeriod(data.summary?.period||{}, start, end);
+    renderCharts(data);
+    renderBestProducts(data.best_products||[]);
+    renderRecentSales(data.recent_sales||[]);
+    renderPL(data.summary?.period||{});
+    renderChannelBreakdown(data.channel_breakdown||[]);
+  } catch(e) { showToast('Gagal memuat dashboard: '+e.message,'error'); }
+}
+
+function renderKPIToday(t) {
+  document.getElementById('kpi-today').innerHTML = `
+    <div class="kpi-card primary"><div class="kpi-icon">💰</div><div class="kpi-label">Pendapatan Hari Ini</div><div class="kpi-value large">${fmt.currency(t.revenue||0)}</div><div class="kpi-change">${t.count||0} transaksi</div></div>
+    <div class="kpi-card warning"><div class="kpi-icon">📋</div><div class="kpi-label">Beban Hari Ini</div><div class="kpi-value large">${fmt.currency(t.expenses||0)}</div><div class="kpi-change">Pengeluaran hari ini</div></div>
+    <div class="kpi-card ${(t.revenue||0)-(t.expenses||0)>=0?'success':'danger'}"><div class="kpi-icon">🎯</div><div class="kpi-label">Net Hari Ini</div><div class="kpi-value large">${fmt.currency((t.revenue||0)-(t.expenses||0))}</div><div class="kpi-change">Pendapatan − Beban</div></div>
+    <div class="kpi-card secondary"><div class="kpi-icon">📦</div><div class="kpi-label">Total Stok Item</div><div class="kpi-value">${fmt.number(0)}</div><div class="kpi-change"><a href="/stock.html" style="color:inherit">Monitor Stok →</a></div></div>
+  `;
+  // Load total stock produk yang termonitor via /stock/products
+  const selBranch = document.getElementById('dash-branch')?.value||'';
+  const stockUrl = '/stock/products' + (selBranch ? '?branch_id='+selBranch : '');
+  API.get(stockUrl).then(r => {
+    let total = 0, itemCount = 0, label = selBranch ? '' : 'Semua Cabang';
+    (r.stocks||[]).forEach(s => { total += (s.current_stock||0); itemCount++; });
+    if (selBranch) {
+      // Ambil nama cabang dari dropdown
+      const sel = document.getElementById('dash-branch');
+      label = sel.options[sel.selectedIndex]?.text || '';
+    }
+    const el = document.querySelector('#kpi-today .kpi-card.secondary .kpi-value');
+    if (el) el.textContent = fmt.number(total);
+    const lbl = document.querySelector('#kpi-today .kpi-card.secondary .kpi-change');
+    if (lbl) {
+      lbl.innerHTML = `<a href="/stock.html" style="color:inherit">${itemCount} item · ${label} →</a>`;
+    }
+  }).catch(()=>{});
+}
+
+function renderKPIPeriod(p, start, end) {
+  const growth = p.growth||0;
+  const labaKotor = p.laba_kotor||0;
+  const labaBersih = p.laba_bersih||0;
+  const periodLabel = start===end ? fmt.date(start) : `${fmt.date(start)} – ${fmt.date(end)}`;
+  document.getElementById('kpi-period').innerHTML = `
+    <div class="kpi-card primary"><div class="kpi-icon">📈</div><div class="kpi-label">Pendapatan Periode</div><div class="kpi-value large">${fmt.currency(p.revenue||0)}</div><div class="kpi-change ${growth>=0?'up':'down'}">${growth>=0?'▲':'▼'} ${Math.abs(growth)}% vs bulan lalu • ${p.count||0} trx</div></div>
+    <div class="kpi-card warning"><div class="kpi-icon">🏭</div><div class="kpi-label">HPP (Bahan Baku+Kemasan)</div><div class="kpi-value large">${fmt.currency(p.hpp||0)}</div><div class="kpi-change">Biaya produksi</div></div>
+    <div class="kpi-card ${labaKotor>=0?'success':'danger'}"><div class="kpi-icon">💹</div><div class="kpi-label">Laba Kotor</div><div class="kpi-value large">${fmt.currency(labaKotor)}</div><div class="kpi-change ${labaKotor>=0?'up':'down'}">Pendapatan − HPP</div></div>
+    <div class="kpi-card ${labaBersih>=0?'success':'danger'}"><div class="kpi-icon">🎯</div><div class="kpi-label">Laba Bersih</div><div class="kpi-value large">${fmt.currency(labaBersih)}</div><div class="kpi-change ${labaBersih>=0?'up':'down'}">Laba Kotor − Beban Ops</div></div>
+  `;
+}
+
+function renderCharts(data) {
+  const chartData = data.sales_chart||[];
+  const labels7=[], rev7=[];
+  for(let i=6;i>=0;i--){
+    // Use local WIB date for label matching
+    const d=wibNow();d.setDate(d.getDate()-i);   // hitung mundur pakai tanggal WIB
+    const year=d.getFullYear(), month=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+    const ds=year+'-'+month+'-'+day;
+    const f=chartData.find(x=>x.date===ds);
+    labels7.push(d.toLocaleDateString('id-ID',{day:'2-digit',month:'short'}));
+    rev7.push(f?f.revenue:0);
+  }
+  if(salesChart)salesChart.destroy();
+  salesChart=new Chart(document.getElementById('salesChart'),{
+    type:'bar',
+    data:{labels:labels7,datasets:[{label:'Pendapatan',data:rev7,backgroundColor:'rgba(30,111,232,0.8)',borderRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>fmt.currency(ctx.raw)}}},scales:{y:{beginAtZero:true,ticks:{callback:v=>'Rp '+(v/1000).toFixed(0)+'k'}},x:{grid:{display:false}}}}
+  });
+
+  const hourly=data.hourly_sales||[];
+  const hrs=Array.from({length:24},(_,i)=>i);
+  if(hourlyChart)hourlyChart.destroy();
+  hourlyChart=new Chart(document.getElementById('hourlyChart'),{
+    type:'line',
+    data:{labels:hrs.map(h=>String(h).padStart(2,'0')+':00 WIB'),datasets:[{label:'Transaksi',data:hrs.map(h=>{const f=hourly.find(x=>parseInt(x.hour)===h);return f?f.count:0;}),borderColor:'#0ea5a0',backgroundColor:'rgba(14,165,160,0.1)',tension:0.4,fill:true,pointRadius:3,pointHoverRadius:5}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:ctx=>ctx[0].label,label:ctx=>ctx.raw+' transaksi'}}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}},x:{ticks:{maxRotation:45,font:{size:10}}}}}
+  });
+
+  const pm=data.payment_breakdown||[];
+  const pmLabels={cash:'Cash',transfer:'Transfer',qris:'QRIS'};
+  if(paymentChart)paymentChart.destroy();
+  if(pm.length>0){
+    paymentChart=new Chart(document.getElementById('paymentChart'),{
+      type:'doughnut',
+      data:{labels:pm.map(p=>pmLabels[p.payment_method]||p.payment_method),datasets:[{data:pm.map(p=>p.total),backgroundColor:['#1e6fe8','#0ea5a0','#d97706'],borderWidth:0,hoverOffset:8}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:12}}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${fmt.currency(ctx.raw)}`}}},cutout:'65%'}
+    });
+  }
+}
+
+function renderChannelBreakdown(channels) {
+  const chLabel={langsung:'Langsung',gofood:'GoFood',grabfood:'GrabFood',shopeefood:'ShopeeFood'};
+  const el=document.getElementById('channel-breakdown');
+  if(!channels||!channels.length){el.innerHTML='<div style="font-size:12px;color:var(--text-muted);text-align:center">Belum ada data</div>';return;}
+  const total=channels.reduce((s,c)=>s+(c.revenue||0),0);
+  el.innerHTML=channels.map(c=>{
+    const pct=total>0?(c.revenue/total*100).toFixed(0):0;
+    return `<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>${chLabel[c.channel]||c.channel}</span><span class="font-mono">${fmt.currency(c.revenue)} <span style="color:var(--text-muted)">${pct}%</span></span></div>`;
+  }).join('');
+}
+
+function renderBestProducts(products) {
+  const el=document.getElementById('best-products-container');
+  if(!products||!products.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📦</div><p>Belum ada data</p></div>';return;}
+  const max=products[0].total_qty;
+  el.innerHTML=products.map((p,i)=>`
+    <div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:13px;font-weight:600">${i===0?'🥇':i===1?'🥈':i===2?'🥉':'  '} ${p.name}</span>
+        <span style="font-size:12px;color:var(--text-secondary);font-family:var(--font-mono)">${fmt.number(p.total_qty)} ${p.unit}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="stock-bar" style="flex:1;height:8px"><div class="stock-bar-fill" style="width:${(p.total_qty/max*100).toFixed(0)}%;background:var(--primary)"></div></div>
+        <span style="font-size:12px;color:var(--primary);font-weight:700;font-family:var(--font-mono);white-space:nowrap">${fmt.currency(p.total_revenue)}</span>
+      </div>
+    </div>`).join('');
+}
+
+function renderPL(p) {
+  if(!p) return;
+  const el=document.getElementById('pl-summary');
+  const rows=[
+    {l:'💰 Pendapatan', v:p.revenue||0, color:'', bold:false},
+    {l:'🏭 HPP (Bahan Baku+Kemasan)', v:-(p.hpp||0), color:'var(--warning)', bold:false},
+    {l:'📈 Laba Kotor', v:p.laba_kotor||0, color:(p.laba_kotor||0)>=0?'var(--success)':'var(--danger)', bold:false},
+    {l:'📋 Beban Operasional', v:-(p.beban||0), color:'var(--danger)', bold:false},
+    {l:'🎯 Laba Bersih', v:p.laba_bersih||0, color:(p.laba_bersih||0)>=0?'var(--success)':'var(--danger)', bold:true},
+  ];
+  el.innerHTML=rows.map((r,i)=>`
+    <div style="display:flex;justify-content:space-between;padding:${r.bold?'10px 0 0':'6px 0'};${r.bold?'border-top:2px solid var(--border);margin-top:4px;font-weight:800;font-size:15px':'border-bottom:1px solid var(--border)'}">
+      <span style="color:${r.color||'var(--text-secondary)'};font-size:13px">${r.l}</span>
+      <span class="font-mono" style="color:${r.color||''};${r.bold?'font-weight:800':''}">${fmt.currency(r.v)}</span>
+    </div>`).join('');
+}
+
+function renderRecentSales(sales) {
+  const tbody=document.getElementById('recent-sales-body');
+  if(!sales||!sales.length){tbody.innerHTML='<tr><td colspan="7" class="text-center text-muted">Belum ada transaksi</td></tr>';return;}
+  const pmText={cash:'Cash',transfer:'Transfer',qris:'QRIS'};
+  tbody.innerHTML=sales.map(s=>`<tr>
+    <td><a href="/sales.html" class="font-mono" style="color:var(--primary);font-size:12px">${s.invoice_number}</a></td>
+    <td>${s.customer||'Umum'}</td>
+    <td>${s.cashier||'-'}</td>
+    <td style="font-size:12px">${s.branch||'-'}</td>
+    <td class="currency fw-bold">${fmt.currency(s.total)}</td>
+    <td><span style="font-size:12px;font-weight:600">${pmText[s.payment_method]||s.payment_method}</span></td>
+    <td style="font-size:12px;color:var(--text-muted)">${fmt.dateTime(s.created_at)}</td>
+  </tr>`).join('');
+}
+
+// Initialize
+document.getElementById('dash-start').value = getMonthStart();
+document.getElementById('dash-end').value = getToday();
+initDashFilters().then(()=>loadDashboard());
+</script>
+</body>
+</html>

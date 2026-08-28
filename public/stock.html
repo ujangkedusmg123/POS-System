@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<script>if(!sessionStorage.getItem('pos_token'))window.location.replace('/login.html');</script>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitoring Stok — Ujang Kedu</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+/* Bubble per cabang seperti sketsa */
+.branches-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(420px, 1fr)); gap:20px; margin-bottom:24px; }
+.branch-card { background:white; border:1px solid #e5e7eb; border-radius:14px; box-shadow:0 1px 3px rgba(0,0,0,0.04); overflow:hidden; }
+.branch-card-head { padding:14px 20px; border-bottom:1px solid #f3f4f6; background:#fafbfc; text-align:center; }
+.branch-card-title { font-size:15px; font-weight:800; color:#0f172a; display:inline-flex; align-items:center; gap:8px; }
+.branch-card-sub { font-size:11px; color:#6b7280; margin-top:2px; }
+.branch-card-body { padding:12px; }
+.item-row { display:grid; grid-template-columns:1fr auto auto; gap:12px; align-items:center; padding:10px 14px; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:8px; background:white; transition:border-color 0.15s; }
+.item-row:hover { border-color:#93c5fd; }
+.item-row:last-child { margin-bottom:0; }
+.item-name { font-weight:600; font-size:14px; color:#111827; }
+.item-code { font-size:11px; color:#6b7280; font-family:ui-monospace,monospace; margin-top:2px; }
+.item-stock { text-align:right; }
+.item-stock-num { font-size:22px; font-weight:900; font-family:ui-monospace,monospace; line-height:1; }
+.item-stock-unit { font-size:10px; color:#6b7280; text-transform:uppercase; letter-spacing:0.5px; }
+.item-actions { display:flex; gap:4px; }
+.mini-btn { width:32px; height:32px; border-radius:8px; border:1px solid #e5e7eb; background:white; cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; transition:all 0.15s; }
+.mini-btn:hover { background:#eff6ff; border-color:#93c5fd; }
+.branch-empty { padding:30px 20px; text-align:center; color:#9ca3af; font-size:13px; }
+.branch-add { display:block; width:100%; padding:10px; background:#f9fafb; border:1.5px dashed #d1d5db; border-radius:10px; color:#6b7280; font-size:13px; font-weight:600; cursor:pointer; text-align:center; margin-top:6px; transition:all 0.15s; }
+.branch-add:hover { border-color:#3b82f6; color:#3b82f6; background:#eff6ff; }
+
+.card-clean { background:white; border:1px solid #e5e7eb; border-radius:14px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+.card-clean-head { padding:14px 18px; border-bottom:1px solid #f3f4f6; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+.card-clean-title { font-weight:800; font-size:14px; }
+
+.log-table { width:100%; border-collapse:collapse; font-size:13px; }
+.log-table th { background:#f9fafb; padding:10px 14px; text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:#6b7280; border-bottom:1px solid #e5e7eb; font-weight:700; }
+.log-table td { padding:10px 14px; border-bottom:1px solid #f3f4f6; vertical-align:middle; }
+.log-table tr:last-child td { border-bottom:none; }
+.tag-in { color:#059669; font-weight:700; }
+.tag-out { color:#dc2626; font-weight:700; }
+.tag-fix { color:#d97706; font-weight:700; }
+.stat-pill { padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700; }
+.stat-red { background:#fee2e2; color:#991b1b; }
+.stat-yellow { background:#fef3c7; color:#92400e; }
+.stat-green { background:#d1fae5; color:#065f46; }
+</style>
+</head>
+<body>
+<aside id="sidebar"><div class="sidebar-logo"><div style="display:flex;align-items:center;gap:10px"><div class="logo-icon">🦐</div><div><div class="logo-text">Ujang Kedu</div><div class="logo-sub">Kuliner Udang Semarang</div></div></div></div><nav class="sidebar-nav" id="sidebar-nav"></nav><div class="sidebar-footer"><div class="sidebar-user" id="sidebar-user"><div class="avatar" id="user-avatar">A</div><div class="user-info"><div class="name" id="user-name">Admin</div><div class="role" id="user-role">Admin</div></div><a onclick="Auth.logout()" style="margin-left:auto;cursor:pointer;font-size:12px;color:rgba(255,255,255,0.7);padding:5px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:6px;white-space:nowrap">🚪 Logout</a></div></div></aside>
+
+<div id="main-content">
+  <div class="top-bar">
+    <div><div class="page-title">📦 Monitoring Stok</div><div class="page-subtitle">Stok per cabang · otomatis berkurang saat penjualan</div></div>
+    <div class="top-bar-actions">
+      <button class="btn btn-secondary" onclick="openMonitorManager()">⚙️ Kelola Item Termonitor</button>
+      <button class="btn btn-secondary" onclick="exportExcel(this)">📗 Excel</button>
+      <button class="btn btn-primary" onclick="openProduksiModal()">+ Catat Produksi</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <!-- Filter -->
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <input type="text" id="search-item" class="form-control" placeholder="🔍 Cari item stok..." style="max-width:340px" oninput="render()">
+    </div>
+
+    <!-- Bubble grid per cabang -->
+    <div id="branches-grid" class="branches-grid"></div>
+
+    <!-- Riwayat -->
+    <div class="card-clean">
+      <div class="card-clean-head" style="flex-wrap:wrap;gap:10px">
+        <span class="card-clean-title">📋 Riwayat Pergerakan Stok</span>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <input type="date" id="log-start" class="form-control" style="width:140px">
+          <span style="color:#6b7280">—</span>
+          <input type="date" id="log-end" class="form-control" style="width:140px">
+          <button class="btn btn-secondary btn-sm" onclick="setLogQuick('today')">Hari Ini</button>
+          <button class="btn btn-secondary btn-sm" onclick="setLogQuick('week')">7 Hari</button>
+          <button class="btn btn-secondary btn-sm" onclick="setLogQuick('month')">Bulan Ini</button>
+          <select id="filter-branch-log" class="form-control" style="width:150px"><option value="">Semua Cabang</option></select>
+          <select id="filter-type-log" class="form-control" style="width:150px">
+            <option value="">Semua Tipe</option>
+            <option value="produksi">Produksi</option>
+            <option value="terjual">Penjualan</option>
+            <option value="koreksi">Koreksi</option>
+            <option value="transfer_in">Transfer Masuk</option>
+            <option value="transfer_out">Transfer Keluar</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="loadLog()">🔄 Terapkan</button>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table class="log-table">
+          <thead>
+            <tr><th>Waktu</th><th>Cabang</th><th>Item</th><th>Tipe</th><th style="text-align:right">Perubahan</th><th style="text-align:right">Saldo</th><th>Operator</th><th></th></tr>
+          </thead>
+          <tbody id="log-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Produksi -->
+<div class="modal-overlay" id="produksi-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title">📦 Catat Produksi</span><button class="modal-close" onclick="closeModal('produksi-modal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group" id="branch-prod-group">
+        <label class="form-label">Cabang *</label>
+        <select id="p-branch" class="form-control"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Item Stok *</label>
+        <select id="p-product" class="form-control"><option value="">-- Pilih item --</option></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Jumlah *</label>
+        <input type="number" id="p-qty" class="form-control" placeholder="0" min="1" style="font-size:24px;font-weight:800;text-align:center;font-family:ui-monospace,monospace">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Catatan</label>
+        <input type="text" id="p-notes" class="form-control" placeholder="Opsional (contoh: produksi pagi)">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('produksi-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="saveProduksi()">✅ Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Koreksi -->
+<div class="modal-overlay" id="koreksi-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title">🔧 Koreksi Stok</span><button class="modal-close" onclick="closeModal('koreksi-modal')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;color:#78350f">⚠️ Nilai yang diinput akan menjadi stok baru (bukan penambahan).</div>
+      <input type="hidden" id="k-product-id"><input type="hidden" id="k-branch-id">
+      <div class="form-group"><label class="form-label">Item</label><input type="text" id="k-product-name" class="form-control" readonly style="background:#f9fafb"></div>
+      <div class="form-group"><label class="form-label">Cabang</label><input type="text" id="k-branch-name" class="form-control" readonly style="background:#f9fafb"></div>
+      <div class="form-group">
+        <label class="form-label">Stok Aktual (Fisik) *</label>
+        <input type="number" id="k-qty" class="form-control" min="0" style="font-size:24px;font-weight:800;text-align:center;font-family:ui-monospace,monospace">
+      </div>
+      <div class="form-group"><label class="form-label">Alasan *</label><input type="text" id="k-notes" class="form-control" placeholder="Misal: hitung fisik, ada yang rusak"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('koreksi-modal')">Batal</button>
+      <button class="btn btn-danger" onclick="saveKoreksi()">🔧 Simpan Koreksi</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Set Min -->
+<div class="modal-overlay" id="min-modal">
+  <div class="modal-box">
+    <div class="modal-header"><span class="modal-title">⚙️ Batas Minimum</span><button class="modal-close" onclick="closeModal('min-modal')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="m-product-id"><input type="hidden" id="m-branch-id">
+      <div class="form-group"><label class="form-label">Item</label><input type="text" id="m-product-name" class="form-control" readonly style="background:#f9fafb"></div>
+      <div class="form-group"><label class="form-label">Batas Minimum</label><input type="number" id="m-min" class="form-control" min="0"></div>
+      <div style="font-size:12px;color:#6b7280">Jika stok ≤ batas minimum, item ditandai "MENIPIS".</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('min-modal')">Batal</button>
+      <button class="btn btn-primary" onclick="saveMin()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Kelola Item Termonitor -->
+<div class="modal-overlay" id="monitor-modal">
+  <div class="modal-box" style="max-width:680px">
+    <div class="modal-header"><span class="modal-title">⚙️ Kelola Item Termonitor</span><button class="modal-close" onclick="closeModal('monitor-modal')">✕</button></div>
+    <div class="modal-body">
+      <div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px;color:#1e40af">
+        💡 Centang item mana saja yang stoknya perlu dipantau di halaman ini. Item yang tercentang akan muncul di setiap bubble cabang.
+      </div>
+      <input type="text" id="monitor-search" class="form-control" placeholder="🔍 Cari produk..." oninput="renderMonitorList()" style="margin-bottom:10px">
+      <div id="monitor-list" style="max-height:400px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('monitor-modal')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+<script>
+initPage('stock','Monitoring Stok','Stok per cabang');
+let allStocks = [], allLogs = [], allProducts = [], branches = [];
+const user = Auth.getUser();
+
+async function loadAll() {
+  try {
+    branches = await API.get('/branches');
+    populateBranches(branches.filter(x=>x.is_active));
+    allProducts = await API.get('/products/meta/stock-items');
+    document.getElementById('p-product').innerHTML =
+      '<option value="">-- Pilih item --</option>' +
+      allProducts.map(p=>`<option value="${p.id}">[${p.code}] ${p.name}</option>`).join('');
+    // Default filter: 7 hari terakhir supaya langsung lihat pergerakan terbaru
+    const today = todayLocal();
+    const d = new Date(); d.setDate(d.getDate()-6);
+    document.getElementById('log-end').value = today;
+    document.getElementById('log-start').value = (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'));
+    await loadStocks();
+    await loadLog();
+  } catch(e) { showToast(e.message,'error'); }
+}
+
+function populateBranches(bs) {
+  ['filter-branch-log','p-branch'].forEach(id=>{
+    const el = document.getElementById(id);
+    const keep = el.querySelector('option[value=""]');
+    el.innerHTML = keep ? keep.outerHTML : '';
+    bs.forEach(b=>{const o=document.createElement('option');o.value=b.id;o.textContent=b.name;el.appendChild(o);});
+  });
+  if (user?.role !== 'admin') {
+    document.getElementById('branch-prod-group').style.display='none';
+    document.getElementById('p-branch').value = user.branch_id;
+  }
+}
+
+async function loadStocks() {
+  const r = await API.get('/stock/products');
+  allStocks = r.stocks;
+  render();
+}
+
+function render() {
+  const q = document.getElementById('search-item').value.toLowerCase();
+
+  // Group by branch, then filter items
+  const activeBranches = branches.filter(b => b.is_active && (user?.role==='admin' || b.id===user.branch_id));
+
+  const grid = document.getElementById('branches-grid');
+  grid.innerHTML = activeBranches.map(b => {
+    const items = allStocks.filter(s =>
+      s.branch_id === b.id &&
+      (!q || (s.product_name||'').toLowerCase().includes(q) || (s.product_code||'').toLowerCase().includes(q))
+    );
+
+    const rows = items.length === 0
+      ? `<div class="branch-empty">Belum ada item yang dimonitor.<br><small>Klik "Kelola Item Termonitor" di atas untuk menambahkan.</small></div>`
+      : items.map(s => {
+          const lvl = s.current_stock<=0 ? 'red' : s.current_stock<=s.min_stock ? 'yellow' : 'green';
+          const color = s.current_stock<=0 ? '#dc2626' : s.current_stock<=s.min_stock ? '#d97706' : '#059669';
+          const status = s.current_stock<=0 ? 'HABIS' : s.current_stock<=s.min_stock ? 'MENIPIS' : 'AMAN';
+          const pnameEsc = (s.product_name||'').replace(/'/g,"\\'");
+          const bnameEsc = (s.branch_name||'').replace(/'/g,"\\'");
+          return `<div class="item-row">
+            <div>
+              <div class="item-name">${s.product_name}</div>
+              <div class="item-code">${s.product_code||''} · min ${s.min_stock} ${s.unit||''} · <span class="stat-pill stat-${lvl}">${status}</span></div>
+            </div>
+            <div class="item-stock">
+              <div class="item-stock-num" style="color:${color}">${s.current_stock}</div>
+              <div class="item-stock-unit">${s.unit||''}</div>
+            </div>
+            <div class="item-actions">
+              <button class="mini-btn" title="Tambah stok" onclick="quickProduksi(${s.product_id},${s.branch_id})">➕</button>
+              ${user?.role==='admin'?`
+                <button class="mini-btn" title="Koreksi" onclick="quickKoreksi(${s.product_id},${s.branch_id},${s.current_stock},'${pnameEsc}','${bnameEsc}')">🔧</button>
+                <button class="mini-btn" title="Batas min" onclick="quickMin(${s.product_id},${s.branch_id},${s.min_stock},'${pnameEsc}')">⚙️</button>
+              `:''}
+            </div>
+          </div>`;
+        }).join('');
+
+    const totalItems = items.length;
+    const totalStock = items.reduce((s,x)=>s+x.current_stock,0);
+
+    return `<div class="branch-card">
+      <div class="branch-card-head">
+        <div class="branch-card-title">🏪 ${b.name}</div>
+        <div class="branch-card-sub">${totalItems} item · total ${totalStock} unit</div>
+      </div>
+      <div class="branch-card-body">
+        ${rows}
+        ${user?.role==='admin' ? `<button class="branch-add" onclick="quickAddItemToBranch(${b.id})">+ Tambah item ke cabang ini</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function loadLog() {
+  const bid = document.getElementById('filter-branch-log').value;
+  const type = document.getElementById('filter-type-log').value;
+  const startDate = document.getElementById('log-start').value;
+  const endDate = document.getElementById('log-end').value;
+  const params = new URLSearchParams();
+  params.set('limit','200');
+  if (bid) params.set('branch_id', bid);
+  if (type) params.set('type', type);
+  if (startDate) params.set('start_date', startDate);
+  if (endDate) params.set('end_date', endDate);
+  allLogs = await API.get('/stock/log?'+params.toString());
+  renderLog();
+}
+
+function setLogQuick(range) {
+  const today = todayLocal();
+  const d = new Date();
+  let start = today;
+  if (range === 'week') { d.setDate(d.getDate()-6); start = (d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')); }
+  else if (range === 'month') { start = today.slice(0,8)+'01'; }
+  document.getElementById('log-start').value = start;
+  document.getElementById('log-end').value = today;
+  loadLog();
+}
+
+function renderLog() {
+  const labelMap = { produksi:'Produksi', terjual:'Penjualan', koreksi:'Koreksi', transfer_in:'Transfer Masuk', transfer_out:'Transfer Keluar' };
+  const bgMap = { produksi:'#d1fae5', terjual:'#fee2e2', koreksi:'#fef3c7', transfer_in:'#dbeafe', transfer_out:'#e0e7ff' };
+  const colorMap = { produksi:'#065f46', terjual:'#991b1b', koreksi:'#92400e', transfer_in:'#1e40af', transfer_out:'#3730a3' };
+  document.getElementById('log-tbody').innerHTML = allLogs.map(l => {
+    const cls = l.quantity_change > 0 ? 'tag-in' : (l.type === 'koreksi' ? 'tag-fix' : 'tag-out');
+    const sign = l.quantity_change > 0 ? '+' : '';
+    const bg = bgMap[l.type] || '#f3f4f6';
+    const col = colorMap[l.type] || '#4b5563';
+    return `<tr>
+      <td style="white-space:nowrap;color:#6b7280;font-size:12px">${fmt.dateTime(l.created_at)}</td>
+      <td style="font-size:12px;font-weight:600">${l.branch_name||'-'}</td>
+      <td>
+        <div style="font-weight:600">${l.product_name||'-'}</div>
+        ${l.notes?`<div style="font-size:11px;color:#6b7280">${l.notes}</div>`:''}
+      </td>
+      <td><span style="font-size:11px;padding:3px 8px;background:${bg};color:${col};border-radius:6px;font-weight:700">${labelMap[l.type]||l.type}</span></td>
+      <td style="text-align:right" class="${cls}">${sign}${l.quantity_change}</td>
+      <td style="text-align:right;font-weight:800">${l.quantity_after}</td>
+      <td style="font-size:12px;color:#6b7280">${l.operator_name||'-'}</td>
+      <td>${l.type==='koreksi' && user?.role==='admin' ? `<button class="mini-btn" onclick="deleteLog(${l.id})" title="Hapus" style="color:#dc2626">🗑️</button>`:''}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="text-center text-muted" style="padding:30px">Belum ada riwayat</td></tr>';
+}
+
+function openProduksiModal() {
+  document.getElementById('p-product').value='';
+  document.getElementById('p-qty').value='';
+  document.getElementById('p-notes').value='';
+  if (user?.branch_id) document.getElementById('p-branch').value = user.branch_id;
+  openModal('produksi-modal');
+}
+function quickProduksi(pid, bid) {
+  openProduksiModal();
+  document.getElementById('p-product').value = pid;
+  document.getElementById('p-branch').value = bid;
+  setTimeout(()=>document.getElementById('p-qty').focus(),200);
+}
+function quickAddItemToBranch(bid) {
+  // Buka modal manage tapi hanya untuk toggle track
+  openMonitorManager();
+}
+function quickKoreksi(pid, bid, cur, pname, bname) {
+  document.getElementById('k-product-id').value=pid;
+  document.getElementById('k-branch-id').value=bid;
+  document.getElementById('k-product-name').value=pname;
+  document.getElementById('k-branch-name').value=bname;
+  document.getElementById('k-qty').value=cur;
+  document.getElementById('k-notes').value='';
+  openModal('koreksi-modal');
+}
+function quickMin(pid, bid, min, pname) {
+  document.getElementById('m-product-id').value=pid;
+  document.getElementById('m-branch-id').value=bid;
+  document.getElementById('m-product-name').value=pname;
+  document.getElementById('m-min').value=min;
+  openModal('min-modal');
+}
+async function saveProduksi() {
+  const pid = parseInt(document.getElementById('p-product').value);
+  const bid = user?.role==='admin' ? parseInt(document.getElementById('p-branch').value) : user?.branch_id;
+  const qty = parseInt(document.getElementById('p-qty').value);
+  const notes = document.getElementById('p-notes').value.trim();
+  if (!pid) return showToast('Pilih item','warning');
+  if (!qty || qty<=0) return showToast('Jumlah harus > 0','warning');
+  if (!bid) return showToast('Pilih cabang','warning');
+  try {
+    const r = await API.post('/stock/produksi',{product_id:pid, branch_id:bid, quantity:qty, notes});
+    showToast(r.message,'success'); closeModal('produksi-modal'); await loadStocks(); await loadLog();
+  } catch(e) { showToast(e.message,'error'); }
+}
+async function saveKoreksi() {
+  const pid = parseInt(document.getElementById('k-product-id').value);
+  const bid = parseInt(document.getElementById('k-branch-id').value);
+  const qty = parseInt(document.getElementById('k-qty').value);
+  const notes = document.getElementById('k-notes').value.trim();
+  if (isNaN(qty) || qty<0) return showToast('Nilai tidak valid','warning');
+  if (!notes) return showToast('Alasan wajib diisi','warning');
+  confirmDialog(`Set stok menjadi <strong>${qty}</strong>?`, async()=>{
+    try {
+      const r = await API.post('/stock/koreksi',{product_id:pid, branch_id:bid, quantity:qty, notes});
+      showToast(r.message,'success'); closeModal('koreksi-modal'); await loadStocks(); await loadLog();
+    } catch(e) { showToast(e.message,'error'); }
+  },'Konfirmasi Koreksi');
+}
+async function saveMin() {
+  const pid = parseInt(document.getElementById('m-product-id').value);
+  const bid = parseInt(document.getElementById('m-branch-id').value);
+  const min = parseInt(document.getElementById('m-min').value)||0;
+  try {
+    const r = await API.put('/stock/min-stock',{product_id:pid, branch_id:bid, min_stock:min});
+    showToast(r.message,'success'); closeModal('min-modal'); await loadStocks();
+  } catch(e) { showToast(e.message,'error'); }
+}
+async function deleteLog(id) {
+  confirmDialog('Hapus entri log ini?', async()=>{
+    try { await API.delete('/stock/log/'+id); showToast('Log dihapus','success'); await loadLog(); await loadStocks(); }
+    catch(e) { showToast(e.message,'error'); }
+  },'Hapus Log');
+}
+
+// ==== KELOLA ITEM TERMONITOR ====
+let allProductsForMonitor = [];
+async function openMonitorManager() {
+  try {
+    allProductsForMonitor = await API.get('/products?include_variants=1');
+    document.getElementById('monitor-search').value = '';
+    renderMonitorList();
+    openModal('monitor-modal');
+  } catch(e) { showToast(e.message,'error'); }
+}
+function renderMonitorList() {
+  const q = document.getElementById('monitor-search').value.toLowerCase();
+  const list = allProductsForMonitor.filter(p => !q || (p.name||'').toLowerCase().includes(q) || (p.code||'').toLowerCase().includes(q));
+  document.getElementById('monitor-list').innerHTML = list.map(p => {
+    const isVariant = !!p.parent_product_id;
+    return `<label style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid #f3f4f6;cursor:pointer;${isVariant?'padding-left:32px;background:#fafbfc':''}"
+      onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='${isVariant?'#fafbfc':'white'}'">
+      <input type="checkbox" ${p.track_stock?'checked':''} onchange="toggleMonitor(${p.id}, this.checked)" style="width:16px;height:16px;cursor:pointer">
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:13px">${isVariant?'└─ ':''}${p.name}</div>
+        <div style="font-size:11px;color:#6b7280;font-family:ui-monospace,monospace">${p.code} · ${p.category_name||'-'}</div>
+      </div>
+      ${p.variant_count>0?`<span class="stat-pill stat-yellow">${p.variant_count} varian</span>`:''}
+    </label>`;
+  }).join('') || '<div style="padding:20px;text-align:center;color:#9ca3af">Tidak ada produk</div>';
+}
+async function toggleMonitor(id, checked) {
+  try {
+    await API.patch(`/products/${id}/track`, {track_stock: checked?1:0});
+    const p = allProductsForMonitor.find(x=>x.id===id);
+    if (p) p.track_stock = checked?1:0;
+    // Refresh dropdown item stok di modal produksi
+    const stockItems = await API.get('/products/meta/stock-items');
+    document.getElementById('p-product').innerHTML = '<option value="">-- Pilih item --</option>' +
+      stockItems.map(p=>`<option value="${p.id}">[${p.code}] ${p.name}</option>`).join('');
+    await loadStocks();
+  } catch(e) {
+    showToast(e.message,'error');
+    renderMonitorList();
+  }
+}
+
+loadAll();
+
+
+/* Ekspor monitoring stok: posisi stok saat ini + riwayat pergerakannya. */
+function exportExcel(btn) {
+  if (!allStocks.length && !allLogs.length) return showToast('Belum ada data untuk diekspor','warning');
+  downloadExcel({
+    filename: 'monitoring-stok-' + getToday(),
+    sheets: [
+      { name:'Posisi Stok', title:'Posisi Stok per Cabang \u2014 Ujang Kedu', meta: excelMeta(),
+        columns:[
+          {header:'Kode',key:'kode'},{header:'Produk',key:'nama',width:30},{header:'Cabang',key:'cabang'},
+          {header:'Stok',key:'stok',type:'number'},{header:'Minimum',key:'min',type:'number'},{header:'Status',key:'status'}],
+        rows: allStocks.map(s => ({ kode:s.product_code||'-', nama:s.product_name||'-', cabang:s.branch_name||'-',
+          stok:s.current_stock||0, min:s.min_stock||0,
+          status:(s.current_stock||0)<=0?'HABIS':((s.current_stock||0)<=(s.min_stock||0)?'MENIPIS':'AMAN') })),
+        totals: { kode:'TOTAL', stok: allStocks.reduce((a,s)=>a+(s.current_stock||0),0) } },
+      { name:'Riwayat Stok', title:'Riwayat Pergerakan Stok', meta: excelMeta(),
+        columns:[
+          {header:'Waktu',key:'waktu',type:'datetime'},{header:'Cabang',key:'cabang'},{header:'Produk',key:'nama',width:28},
+          {header:'Jenis',key:'jenis'},{header:'Perubahan',key:'ubah',type:'number'},
+          {header:'Sebelum',key:'sebelum',type:'number'},{header:'Sesudah',key:'sesudah',type:'number'},
+          {header:'Keterangan',key:'ket',width:34}],
+        rows: allLogs.map(l => ({ waktu:l.created_at, cabang:l.branch_name||'-', nama:l.product_name||'-',
+          jenis:l.type, ubah:l.quantity_change||0, sebelum:l.quantity_before||0, sesudah:l.quantity_after||0, ket:l.notes||'-' })) },
+    ],
+  }, btn);
+}
+</script>
+</body>
+</html>
